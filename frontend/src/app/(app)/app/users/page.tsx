@@ -26,12 +26,15 @@ import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { fetchApi } from "@/lib/api-client";
+import { getSession } from "@/lib/auth";
 import {
   calculateUserMetrics,
   filterUsers,
   getDefaultUserFormValues,
   getRoleLabel,
   type UserDirectoryItem,
+  type UserRole,
+  type UserStatus,
 } from "./user-domain";
 
 const userSchema = z.object({
@@ -45,13 +48,62 @@ const userSchema = z.object({
 
 type UserForm = z.infer<typeof userSchema>;
 type User = UserForm & UserDirectoryItem;
+type TenantOption = { label: string; value: string };
+type TenantResponse = {
+  id: string;
+  name: string;
+  slug: string;
+  province: string;
+  plan: string;
+  status: string;
+  studentCap: number;
+  activeUsers: number;
+};
 
-const tenantOptions = [
-  { label: "SMP Morfosis Demo", value: "tenant-smp-morfosis" },
-  { label: "SMA Nusantara 2", value: "tenant-sma-nusantara" },
+type ApiUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  status: UserStatus;
+  tenantId?: string;
+  tenantName?: string;
+};
+
+const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
+const fallbackTenantOptions: TenantOption[] = [
+  { label: "SMA Morfosis Demo", value: DEMO_TENANT_ID },
 ];
 
-const emptyUser: UserForm = getDefaultUserFormValues(tenantOptions);
+function resolveCurrentTenant(): TenantOption {
+  if (typeof window === "undefined") return fallbackTenantOptions[0];
+  const session = getSession();
+  return {
+    label: session?.tenantName ?? fallbackTenantOptions[0].label,
+    value: session?.tenantId ?? fallbackTenantOptions[0].value,
+  };
+}
+
+function toTenantOptions(tenants: TenantResponse[]): TenantOption[] {
+  return tenants.map((tenant) => ({ label: tenant.name, value: tenant.id }));
+}
+
+function mapApiUser(user: ApiUser, currentTenant: TenantOption, tenants: TenantOption[]): User {
+  const tenantId = user.tenantId ?? currentTenant.value;
+  const tenantName = user.tenantName ?? tenants.find((tenant) => tenant.value === tenantId)?.label ?? currentTenant.label;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+    tenantId,
+    tenantName,
+    lastSeen: "—",
+  };
+}
+
+const emptyUser: UserForm = getDefaultUserFormValues(fallbackTenantOptions);
 const initialUsers: User[] = [
   {
     id: "usr-admin-001",
@@ -86,11 +138,25 @@ const initialUsers: User[] = [
 ];
 
 export default function UsersPage() {
+  const [tenantOptions, setTenantOptions] = React.useState<TenantOption[]>(fallbackTenantOptions);
+  const [currentTenant, setCurrentTenant] = React.useState<TenantOption>(fallbackTenantOptions[0]);
   const [users, setUsers] = React.useState<User[]>(initialUsers);
+
   React.useEffect(() => {
-    fetchApi<{ data: User[] }>('/api/v1/users')
-      .then(res => setUsers(res.data || []))
-      .catch(err => console.error("Failed to fetch users", err));
+    const sessionTenant = resolveCurrentTenant();
+    setCurrentTenant(sessionTenant);
+
+    Promise.all([
+      fetchApi<{ data: TenantResponse[] }>("/api/v1/tenants"),
+      fetchApi<{ data: ApiUser[] }>("/api/v1/users"),
+    ])
+      .then(([tenantResponse, userResponse]) => {
+        const options = toTenantOptions(tenantResponse.data || []);
+        const mergedTenantOptions = options.length > 0 ? options : [sessionTenant];
+        setTenantOptions(mergedTenantOptions);
+        setUsers((userResponse.data || []).map((user) => mapApiUser(user, sessionTenant, mergedTenantOptions)));
+      })
+      .catch((err) => console.error("Failed to fetch users", err));
   }, []);
 
   const [query, setQuery] = React.useState("");
@@ -104,6 +170,8 @@ export default function UsersPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<UserForm>({
     resolver: zodResolver(userSchema),
@@ -123,7 +191,7 @@ export default function UsersPage() {
 
   function openCreate() {
     setEditingUser(null);
-    reset(emptyUser);
+    reset({ ...emptyUser, tenantId: currentTenant.value });
     setSheetOpen(true);
   }
 
@@ -140,23 +208,27 @@ export default function UsersPage() {
 
   async function onSubmit(values: UserForm) {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    // const tenantName =
-      tenantOptions.find((tenant) => tenant.value === values.tenantId)?.label ??
-      "Unknown Tenant";
-const method = editingUser ? "PATCH" : "POST";
+    const tenantName = tenantOptions.find((tenant) => tenant.value === values.tenantId)?.label ?? currentTenant.label;
+    const method = editingUser ? "PATCH" : "POST";
     const endpoint = editingUser ? `/api/v1/users/${editingUser.id}` : "/api/v1/users";
     
     try {
-      const savedUser = await fetchApi<User>(endpoint, {
+      const savedUser = await fetchApi<ApiUser>(endpoint, {
         method,
-        body: JSON.stringify(values),
+        headers: { "X-Tenant-ID": values.tenantId },
+        body: JSON.stringify({ name: values.name, email: values.email, role: values.role }),
       });
+      const hydratedUser: User = {
+        ...mapApiUser(savedUser, { label: tenantName, value: values.tenantId }, tenantOptions),
+        tenantId: values.tenantId,
+        tenantName,
+      };
 
       if (editingUser) {
-        setUsers((current) => current.map((item) => item.id === editingUser.id ? { ...item, ...savedUser } : item));
+        setUsers((current) => current.map((item) => item.id === editingUser.id ? { ...item, ...hydratedUser } : item));
         toast("User updated", `${values.name} berhasil diperbarui.`);
       } else {
-        setUsers((current) => [savedUser, ...current]);
+        setUsers((current) => [hydratedUser, ...current]);
         toast("User created", `${values.name} siap menerima invitation flow.`);
       }
       setSheetOpen(false);
@@ -318,6 +390,8 @@ const method = editingUser ? "PATCH" : "POST";
                 startAdornment={<School className="h-4 w-4" />}
                 options={tenantOptions}
                 {...register("tenantId")}
+                value={watch("tenantId")}
+                onChange={(event) => setValue("tenantId", event.target.value, { shouldDirty: true, shouldValidate: true })}
                 error={errors.tenantId?.message}
               />
             </InputGroupItem>
@@ -331,6 +405,8 @@ const method = editingUser ? "PATCH" : "POST";
                   { label: "Murid", value: "student" },
                 ]}
                 {...register("role")}
+                value={watch("role")}
+                onChange={(event) => setValue("role", event.target.value as UserForm["role"], { shouldDirty: true, shouldValidate: true })}
                 error={errors.role?.message}
               />
             </InputGroupItem>

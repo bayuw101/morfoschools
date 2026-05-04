@@ -27,6 +27,7 @@ WITH checks AS (
     UNION ALL SELECT 'exam_eligible_students', COUNT(*) FROM exam_eligible_students WHERE tenant_id = '$MORFOSIS_DEMO_TENANT_ID' AND exam_id = '$MORFOSIS_DEMO_EXAM_ID' AND eligibility_status = 'eligible'
     UNION ALL SELECT 'exam_gate_windows', COUNT(*) FROM exam_gate_windows WHERE tenant_id = '$MORFOSIS_DEMO_TENANT_ID' AND exam_id = '$MORFOSIS_DEMO_EXAM_ID' AND password = '$MORFOSIS_DEMO_GATE_PASSWORD'
     UNION ALL SELECT 'manual-grading', COUNT(*) FROM exam_grade_results WHERE tenant_id = '$MORFOSIS_DEMO_TENANT_ID' AND exam_id = '$MORFOSIS_DEMO_EXAM_ID' AND status = 'waiting_for_grading'
+    UNION ALL SELECT 'monitor-security-events', COUNT(*) FROM exam_security_events WHERE tenant_id = '$MORFOSIS_DEMO_TENANT_ID' AND exam_id = '$MORFOSIS_DEMO_EXAM_ID'
 )
 SELECT CASE WHEN bool_and(count > 0) THEN 'ok' ELSE 'failed: ' || string_agg(name || '=' || count, ', ') END FROM checks;
 " | tee /tmp/morfosis-demo-smoke.txt
@@ -49,5 +50,6 @@ Suggested API surfaces to try with these IDs:
   POST /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/gate/check
   GET  /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/attempts/$MORFOSIS_DEMO_ATTEMPT_ID/result
   GET  /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/manual-grading
+  GET  /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/monitor
   POST /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/attempts/$MORFOSIS_DEMO_ATTEMPT_ID/manual-grade
 SUMMARY

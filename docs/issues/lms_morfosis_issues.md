@@ -150,6 +150,7 @@
 *   Backend note: Added autosave ingestion path `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/autosave`; `exam_submission_inbox.submission_kind` distinguishes `autosave` vs `final_submit` rows while preserving the same append-only receipt pattern.
 *   Backend note: Added tenant-scoped receipt verification endpoint `GET /api/v1/receipts/{receipt_id}` returning receipt metadata, submission kind, received timestamp, and relay status for proof-of-submission checks before async grading completes.
 *   Backend note: Added first async NATS JetStream relay for `exam_submission_inbox`; backend auto-creates file-backed stream `MORFOSIS_EXAM_SUBMISSIONS`, publishes to `morfosis.exam.submissions.{kind}`, prioritizes final submits before autosaves, and marks `relayed_at` only after successful publish.
+*   Backend note: Added teacher monitor API with TDD. `GET /api/v1/exams/{exam_id}/monitor` returns attempt counts, unrelayed submission lag, latest receipts, and security-event feed for the live monitor dashboard.
 
 ## Epic 5: Grading & Analytics
 *Tujuan: Penilaian otomatis dan manual essay.*

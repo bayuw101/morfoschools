@@ -173,6 +173,13 @@ Start small with tenancy + health.
 - [x] Pending/manual grading states return stable `ready=false` messages so the frontend can show grading-pending copy without polling expensive joins during spikes
 - [x] Result repository reads from existing receipt and grading tables; no new schema is required
 
+## Phase BE-13 — Teacher Monitor API
+
+- [x] `GET /api/v1/exams/{exam_id}/monitor` returns tenant-scoped exam monitoring data for teacher/admin dashboards
+- [x] Monitor summary includes eligible/blocked students, attempts by status, unrelayed submission count, oldest unrelayed age, and security warning/critical counts
+- [x] Response includes latest receipts and latest security events so teachers can inspect submission flow and proctoring signals without touching external services
+- [x] Demo seed/smoke now includes a sample security event and monitor endpoint hint
+
 ## Verification
 
 - [x] `docker compose config`
@@ -204,3 +211,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-10 manual grading API. Added TDD-covered queue and grading endpoints for essay/manual review, teacher feedback/scoring fields, final score calculation, and attempt completion after manual grading.
 - 2026-05-04: Completed BE-11 demo seed and smoke validation. Added idempotent local demo data plus deterministic smoke checks so the backend can be tried without hand-crafting UUID graph data.
 - 2026-05-04: Completed BE-12 result read API. Added tenant-scoped result endpoint combining receipt proof, relay status, attempt/grading state, auto/manual/final scores, question-level results, and pending/completed messages for the student result page.
+- 2026-05-04: Completed BE-13 teacher monitor API. Added tenant-scoped exam monitor endpoint with summary counts, ingestion lag, latest receipts, and security-event feed for teacher/admin dashboards.

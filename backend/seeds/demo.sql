@@ -110,4 +110,8 @@ INSERT INTO exam_grade_results (tenant_id, exam_id, attempt_id, student_id, rece
 VALUES ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000801','00000000-0000-4000-8000-000000000901','00000000-0000-4000-8000-000000000301','00000000-0000-4000-8000-000000000911','waiting_for_grading',5,10,true,'[{"questionId":"00000000-0000-4000-8000-000000000811","score":5,"maxPoints":5},{"questionId":"00000000-0000-4000-8000-000000000812","score":0,"maxPoints":5,"requiresManualGrading":true}]'::jsonb,0,5)
 ON CONFLICT (tenant_id, attempt_id, receipt_id) DO UPDATE SET status='waiting_for_grading', auto_score=5, max_score=10, requires_manual_grading=true, question_results=EXCLUDED.question_results, manual_score=0, final_score=5, feedback='', graded_by='', graded_at=now();
 
+INSERT INTO exam_security_events (id, tenant_id, exam_id, attempt_id, student_id, event_type, severity, metadata, occurred_at)
+VALUES (9001,'00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000801','00000000-0000-4000-8000-000000000901','00000000-0000-4000-8000-000000000301','fullscreen_exit','warning','{"source":"demo_seed"}'::jsonb,now())
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

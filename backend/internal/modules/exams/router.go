@@ -11,6 +11,7 @@ type Router struct {
 	gate          http.Handler
 	manualGrading http.Handler
 	result        http.Handler
+	monitor       http.Handler
 	ingestion     http.Handler
 }
 
@@ -21,6 +22,7 @@ func NewRouter(repo PostgresSubmissionRepository) http.Handler {
 		gate:          NewGateHandler(repo),
 		manualGrading: NewManualGradingHandler(repo),
 		result:        NewResultHandler(repo),
+		monitor:       NewMonitorHandler(repo),
 		ingestion:     NewIngestionHandler(repo),
 	}
 }
@@ -45,6 +47,10 @@ func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if isResultPath(path) {
 		router.result.ServeHTTP(w, r)
+		return
+	}
+	if isMonitorPath(path) {
+		router.monitor.ServeHTTP(w, r)
 		return
 	}
 	router.ingestion.ServeHTTP(w, r)
@@ -90,4 +96,9 @@ func isManualGradingPath(path string) bool {
 func isResultPath(path string) bool {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	return len(parts) == 7 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "attempts" && parts[6] == "result"
+}
+
+func isMonitorPath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	return len(parts) == 5 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "monitor"
 }

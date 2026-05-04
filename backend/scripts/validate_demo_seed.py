@@ -19,6 +19,7 @@ REQUIRED_SMOKE_TOKENS = [
     "MORFOSIS_DEMO_EXAM_ID",
     "MORFOSIS_DEMO_ATTEMPT_ID",
     "manual-grading",
+    "monitor",
 ]
 
 

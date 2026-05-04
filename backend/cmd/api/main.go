@@ -101,7 +101,7 @@ func main() {
 		backgroundCtx := context.Background()
 		startSubmissionRelay(backgroundCtx, cfg.NATSURL, examRepo)
 		startGradingWorker(backgroundCtx, examRepo)
-		startAnalyticsConsumer(backgroundCtx, cfg.NATSURL)
+		startAnalyticsConsumer(backgroundCtx, cfg.NATSURL, cfg.ClickHouseURL)
 	}
 
 	var server http.Handler
@@ -168,7 +168,7 @@ func startGradingWorker(ctx context.Context, repo exams.PostgresSubmissionReposi
 	}()
 }
 
-func startAnalyticsConsumer(ctx context.Context, natsURL string) {
+func startAnalyticsConsumer(ctx context.Context, natsURL string, clickhouseURL string) {
 	conn, err := nats.Connect(natsURL, nats.Timeout(5*time.Second))
 	if err != nil {
 		log.Printf("analytics consumer disabled: connect nats: %v", err)
@@ -180,8 +180,19 @@ func startAnalyticsConsumer(ctx context.Context, natsURL string) {
 		return
 	}
 
-	// For now, use Nop sink. ClickHouse will replace this in BE-20.
-	sink := analytics.NopSubmissionEventSink{}
+	// Determine sink: ClickHouse if URL provided, otherwise Nop
+	var sink analytics.SubmissionEventSink
+	if clickhouseURL != "" {
+		if err := analytics.InitializeClickHouseSchema(ctx, clickhouseURL); err != nil {
+			log.Printf("clickhouse schema init failed (using nop sink): %v", err)
+			sink = analytics.NopSubmissionEventSink{}
+		} else {
+			log.Println("clickhouse connected — analytics sink active")
+			sink = analytics.NewClickHouseSink(clickhouseURL, nil)
+		}
+	} else {
+		sink = analytics.NopSubmissionEventSink{}
+	}
 	handler := analytics.NewSubmissionEventHandler(sink)
 
 	// Subscribe to MORFOSIS_EXAM_SUBMISSIONS stream.

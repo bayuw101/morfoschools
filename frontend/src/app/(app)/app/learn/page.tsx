@@ -21,6 +21,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Progress } from "@/components/ui/progress";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { listLearningCourses } from "./learn-api";
 import {
   calculateLearningMetrics,
   filterLearningCourses,
@@ -28,87 +29,63 @@ import {
   type LearningCourseRecord,
 } from "./learn-domain";
 
-const learningCourses: LearningCourseRecord[] = [
-  {
-    id: "course-algebra-x",
-    title: "Aljabar Linear Dasar",
-    teacher: "Guru Matematika",
-    subjectGroup: "Matematika X - Pagi",
-    progress: 68,
-    status: "available",
-    prerequisites: ["Placement Test Matematika X selesai"],
-    nextModule: "Latihan Persamaan",
-    modules: [
-      {
-        id: "mod-1",
-        title: "Konsep Variabel",
-        type: "video",
-        duration: "12 menit",
-        progress: 100,
-        resource: "YouTube metadata",
-      },
-      {
-        id: "mod-2",
-        title: "Latihan Persamaan",
-        type: "document",
-        duration: "20 menit",
-        progress: 42,
-        resource: "Google Drive PDF",
-      },
-      {
-        id: "mod-3",
-        title: "Quiz Refleksi",
-        type: "article",
-        duration: "8 menit",
-        progress: 0,
-        resource: "Internal note",
-      },
-    ],
-  },
-  {
-    id: "course-fisika-olimpiade",
-    title: "Kinematika Olimpiade",
-    teacher: "Guru Fisika",
-    subjectGroup: "Olimpiade Fisika",
-    progress: 18,
-    status: "blocked",
-    prerequisites: ["Vektor & Gerak Dasar belum selesai", "Pretest Fisika Olimpiade belum lulus"],
-    nextModule: "Gerak Lurus Berubah Beraturan",
-    modules: [
-      {
-        id: "mod-4",
-        title: "Gerak Lurus Berubah Beraturan",
-        type: "video",
-        duration: "25 menit",
-        progress: 18,
-        resource: "YouTube metadata",
-      },
-    ],
-  },
-];
-
-const activityTrail = [
-  "Opened Aljabar Linear Dasar • 2 menit lalu",
-  "Watched Konsep Variabel sampai 100% • 8 menit lalu",
-  "Downloaded Latihan Persamaan.pdf • 12 menit lalu",
-  "Prerequisite checked untuk Kinematika Olimpiade • 18 menit lalu",
-];
-
 function moduleIcon(type: string) {
   if (type === "video") return Youtube;
   if (type === "document") return FileText;
   return BookOpen;
 }
 
+function LearnSkeleton() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+      <Panel className="space-y-4 p-5">
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="h-28 animate-pulse rounded-3xl bg-[color:var(--surface-subtle)]" />
+        ))}
+      </Panel>
+      <Panel className="space-y-4 p-5">
+        <div className="aspect-video animate-pulse rounded-[28px] bg-[color:var(--surface-subtle)]" />
+        <div className="h-24 animate-pulse rounded-3xl bg-[color:var(--surface-subtle)]" />
+      </Panel>
+    </div>
+  );
+}
+
 export default function LearnPage() {
-  const [selectedCourseId, setSelectedCourseId] = React.useState(learningCourses[0].id);
+  const [learningCourses, setLearningCourses] = React.useState<LearningCourseRecord[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string | null>(null);
   const [query, setQuery] = React.useState("");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const filteredCourses = filterLearningCourses(learningCourses, query);
   const selectedCourse =
-    filteredCourses.find((course) => course.id === selectedCourseId) ?? filteredCourses[0] ?? learningCourses[0];
-  const selectedModule = getNextRecommendedMaterial(selectedCourse) ?? selectedCourse.modules[0];
-  const metrics = calculateLearningMetrics(learningCourses, 18);
+    filteredCourses.find((course) => course.id === selectedCourseId) ?? filteredCourses[0] ?? null;
+  const selectedModule = selectedCourse ? getNextRecommendedMaterial(selectedCourse) : null;
+  const metrics = calculateLearningMetrics(learningCourses, 0);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    listLearningCourses()
+      .then((courses) => {
+        if (cancelled) return;
+        setLearningCourses(courses);
+        setSelectedCourseId((current) => current ?? courses[0]?.id ?? null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Gagal memuat learning courses");
+        setLearningCourses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toast(title: string, description: string, tone: ToastItem["tone"] = "success") {
     setToasts((current) => [
@@ -155,6 +132,18 @@ export default function LearnPage() {
         <MetricCard label="Events Today" value={String(metrics.eventsToday)} detail="View, watch, download" icon={Eye} />
       </div>
 
+      {isLoading ? (
+        <LearnSkeleton />
+      ) : error ? (
+        <Alert tone="error" title="Gagal memuat learning courses" description={error} />
+      ) : !selectedCourse || !selectedModule ? (
+        <Panel className="p-8 text-center">
+          <h2 className="font-display text-xl font-semibold">Belum ada learning course</h2>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-[color:var(--muted-foreground)]">
+            Course yang sudah dipublish akan muncul di sini setelah tersedia dari backend. Tidak ada dummy course fallback agar audit data tetap akurat.
+          </p>
+        </Panel>
+      ) : (
       <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
         <Panel className="overflow-hidden p-0">
           <div className="border-b border-[color:var(--border)] px-5 py-4">
@@ -290,18 +279,15 @@ export default function LearnPage() {
           </Panel>
         </div>
       </div>
+      )}
 
       <Panel className="p-5">
         <div className="mb-4 flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-[color:var(--brand-strong)]" />
           <h2 className="font-display text-xl font-semibold">Learning Event Trail</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {activityTrail.map((item) => (
-            <div key={item} className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] p-4 text-sm text-[color:var(--muted-foreground)]">
-              {item}
-            </div>
-          ))}
+        <div className="rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] p-4 text-sm text-[color:var(--muted-foreground)]">
+          Event trail menunggu endpoint learning events. Aksi siswa tetap tidak bergantung pada YouTube/Drive di critical path.
         </div>
       </Panel>
 

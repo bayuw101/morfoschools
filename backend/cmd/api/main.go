@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bayuw101/morfoschools/internal/modules/academic"
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
 	"github.com/bayuw101/morfoschools/internal/modules/identity"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
@@ -39,6 +40,10 @@ func main() {
 		pgxPool := dbPool.PgxPool()
 		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
+		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
+		mux.Handle("/api/v1/academic/subjects", academicHandler)
+		mux.Handle("/api/v1/academic/course-offerings", academicHandler)
+		mux.Handle("/api/v1/academic/teaching-assignments", academicHandler)
 		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
 		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))

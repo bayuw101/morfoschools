@@ -59,6 +59,7 @@
 *   Manage Class Sections (e.g., 10-A, 11-B).
 *   Student enrollment to Administrative Class.
 *   Implementation note: Added `/app/classes` review surface with Class Sections CRUD, RightPullSheet create/edit flow, duplicate class-year guardrail, and student enrollment management with one-active-class warning.
+*   Backend note: Added BE-4 academic foundation migration and API slice for `subjects`, `course_offerings`, and `teaching_assignments`. Course offerings explicitly link `class_sections` to `subjects` by academic year/term so administrative classes remain separate from academic teaching/exam targeting.
 
 ### ISSUE-006: Subject Groups (Rombongan Belajar)
 *   UI & API untuk membuat Subject Groups (Academic Group).

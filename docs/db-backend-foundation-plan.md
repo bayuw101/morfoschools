@@ -28,8 +28,8 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `internal/platform/db`
   - [x] `internal/modules/tenancy`
   - [x] `internal/modules/identity`
-  - [ ] `internal/modules/academic`
-  - [ ] `internal/modules/exams`
+  - [x] `internal/modules/academic`
+  - [x] `internal/modules/exams`
   - [x] `migrations`
 
 ## Phase DB-1 — Core Schema
@@ -44,9 +44,9 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `students`
   - [x] `class_sections`
   - [x] `student_class_enrollments`
-  - [ ] `subjects`
-  - [ ] `course_offerings`
-  - [ ] `teaching_assignments`
+  - [x] `subjects`
+  - [x] `course_offerings`
+  - [x] `teaching_assignments`
   - [ ] `subject_group_memberships`
 - [ ] Course tables:
   - [ ] `courses`
@@ -93,6 +93,16 @@ Start small with tenancy + health.
 - [ ] authentication/session tokens
 - [x] role authorization middleware
 
+## Phase BE-4 — Academic Foundation
+
+- [x] `GET /api/v1/academic/subjects` lists tenant-scoped subjects
+- [x] `POST /api/v1/academic/subjects` creates/updates subjects by tenant + code
+- [x] `GET /api/v1/academic/course-offerings` lists subject-to-class offerings per academic year/term
+- [x] `POST /api/v1/academic/course-offerings` creates/activates course offerings
+- [x] `GET /api/v1/academic/teaching-assignments` lists teacher assignments
+- [x] `POST /api/v1/academic/teaching-assignments` assigns teachers to course offerings
+- [ ] subject group membership backend API
+
 ## Verification
 
 - [x] `docker compose config`
@@ -114,3 +124,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed first asynchronous NATS JetStream relay. Backend now connects to `NATS_URL`, auto-creates the file-backed `MORFOSIS_EXAM_SUBMISSIONS` stream if missing, polls unrelayed inbox rows, prioritizes `final_submit` before `autosave`, publishes events to `morfosis.exam.submissions.{kind}`, then marks rows relayed only after successful publish.
 - 2026-05-04: Started BE-3 identity foundation. Added TDD coverage and implementation for `GET /api/v1/users` and `POST /api/v1/users`, with tenant context required, email/name/role validation, global `users` upsert, and tenant membership role assignment through `tenant_users`.
 - 2026-05-04: Added lightweight auth context and role authorization middleware. `authctx.Middleware` reads `X-User-ID`/`X-User-Role`, stores the authenticated user in request context, and `RequireRoles(...)` returns `401 user_required` or `403 role_forbidden` for protected routes. This is a temporary boundary until proper session/JWT tokens are implemented.
+- 2026-05-04: Completed BE-4 academic foundation slice. Added `subjects`, `course_offerings`, and `teaching_assignments` migration plus TDD-covered academic handlers/repository for subject CRUD, subject-to-class course offerings, and teacher assignments. This preserves the administrative-vs-academic model: `class_sections` remain administrative, while `course_offerings` link classes to subjects for learning/exam targeting.

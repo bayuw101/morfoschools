@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bayuw101/morfoschools/internal/platform/authctx"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
@@ -109,6 +110,8 @@ type ManagementRepository interface {
 	DeleteExam(ctx context.Context, tenantID string, examID string) error
 	ListQuestions(ctx context.Context, tenantID, examID string) ([]ExamQuestion, error)
 	CreateQuestion(ctx context.Context, tenantID, examID string, params CreateExamQuestionParams) (ExamQuestion, error)
+	UpdateQuestion(ctx context.Context, tenantID, examID, questionID string, params CreateExamQuestionParams) (ExamQuestion, error)
+	DeleteQuestion(ctx context.Context, tenantID, examID, questionID string) error
 	ListTargets(ctx context.Context, tenantID, examID string) ([]ExamTarget, error)
 	CreateTarget(ctx context.Context, tenantID, examID string, params CreateExamTargetParams) (ExamTarget, error)
 	ListGateWindows(ctx context.Context, tenantID, examID string) ([]ExamGateWindow, error)
@@ -134,7 +137,7 @@ func (h ManagementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleExams(w, r, tenantID, "")
 		return
 	}
-	examID, child, ok := parseManagementPath(path)
+	examID, child, childID, ok := parseManagementPath(path)
 	if !ok {
 		// Could be /api/v1/exams/{id}
 		parts := strings.Split(strings.Trim(path, "/"), "/")
@@ -147,7 +150,7 @@ func (h ManagementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch child {
 	case "questions":
-		h.handleQuestions(w, r, tenantID, examID)
+		h.handleQuestions(w, r, tenantID, examID, childID)
 	case "targets":
 		h.handleTargets(w, r, tenantID, examID)
 	case "gate-windows":
@@ -159,12 +162,19 @@ func (h ManagementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func parseManagementPath(path string) (string, string, bool) {
+func parseManagementPath(path string) (string, string, string, bool) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) != 5 || parts[0] != "api" || parts[1] != "v1" || parts[2] != "exams" || parts[3] == "" {
-		return "", "", false
+	if (len(parts) != 5 && len(parts) != 6) || parts[0] != "api" || parts[1] != "v1" || parts[2] != "exams" || parts[3] == "" || parts[4] == "" {
+		return "", "", "", false
 	}
-	return parts[3], parts[4], true
+	childID := ""
+	if len(parts) == 6 {
+		childID = parts[5]
+		if childID == "" {
+			return "", "", "", false
+		}
+	}
+	return parts[3], parts[4], childID, true
 }
 
 func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, tenantID, examID string) {
@@ -192,6 +202,7 @@ func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, t
 			return
 		}
 		p = normalizeExam(p)
+		p.CreatedBy = strings.TrimSpace(authctx.FromContext(r.Context()).ID)
 		if err := validateExam(p); err != nil {
 			writeJSON(w, 400, map[string]string{"error": err.Error()})
 			return
@@ -237,9 +248,13 @@ func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, t
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}
 }
-func (h ManagementHandler) handleQuestions(w http.ResponseWriter, r *http.Request, tenantID, examID string) {
+func (h ManagementHandler) handleQuestions(w http.ResponseWriter, r *http.Request, tenantID, examID, questionID string) {
 	switch r.Method {
 	case http.MethodGet:
+		if questionID != "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
 		items, err := h.repo.ListQuestions(r.Context(), tenantID, examID)
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "list_questions_failed"})
@@ -247,6 +262,10 @@ func (h ManagementHandler) handleQuestions(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, 200, map[string][]ExamQuestion{"data": items})
 	case http.MethodPost:
+		if questionID != "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
 		var p CreateExamQuestionParams
 		if json.NewDecoder(r.Body).Decode(&p) != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
@@ -264,33 +283,33 @@ func (h ManagementHandler) handleQuestions(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, 201, item)
 	case http.MethodPatch:
-		if examID == "" {
+		if questionID == "" {
 			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 			return
 		}
-		var p CreateExamParams
+		var p CreateExamQuestionParams
 		if json.NewDecoder(r.Body).Decode(&p) != nil {
 			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
 			return
 		}
-		p = normalizeExam(p)
-		if err := validateExam(p); err != nil {
+		p = normalizeQuestion(p)
+		if err := validateQuestion(p); err != nil {
 			writeJSON(w, 400, map[string]string{"error": err.Error()})
 			return
 		}
-		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		item, err := h.repo.UpdateQuestion(r.Context(), tenantID, examID, questionID, p)
 		if err != nil {
-			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			writeJSON(w, 500, map[string]string{"error": "update_question_failed"})
 			return
 		}
 		writeJSON(w, 200, item)
 	case http.MethodDelete:
-		if examID == "" {
+		if questionID == "" {
 			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 			return
 		}
-		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
-			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+		if err := h.repo.DeleteQuestion(r.Context(), tenantID, examID, questionID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_question_failed"})
 			return
 		}
 		writeJSON(w, 200, map[string]string{"status": "deleted"})

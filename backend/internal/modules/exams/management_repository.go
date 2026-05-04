@@ -59,7 +59,18 @@ func (repo PostgresSubmissionRepository) CreateExam(ctx context.Context, tenantI
 	var item Exam
 	err := repo.pool.QueryRow(ctx, `
 INSERT INTO exams (tenant_id, title, subject_name, status, duration_minutes, security_mode, created_by)
-VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,'')::uuid)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  CASE
+    WHEN $7 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN $7::uuid
+    ELSE NULL
+  END
+)
 RETURNING id::text, title, subject_name, status, duration_minutes, security_mode, COALESCE(created_by::text,''), 0`, tenantID, p.Title, p.SubjectName, p.Status, p.DurationMinutes, p.SecurityMode, p.CreatedBy).Scan(&item.ID, &item.Title, &item.SubjectName, &item.Status, &item.DurationMinutes, &item.SecurityMode, &item.CreatedBy, &item.QuestionCount)
 	return item, err
 }
@@ -91,15 +102,66 @@ func (repo PostgresSubmissionRepository) CreateQuestion(ctx context.Context, ten
 	var item ExamQuestion
 	var raw []byte
 	err = repo.pool.QueryRow(ctx, `
+WITH next_position AS (
+  SELECT COALESCE(MAX(position), 0) + 1 AS value
+  FROM exam_questions
+  WHERE tenant_id = $1 AND exam_id = $2
+), requested_position AS (
+  SELECT CASE
+    WHEN $5 > 0 AND NOT EXISTS (
+      SELECT 1 FROM exam_questions WHERE tenant_id = $1 AND exam_id = $2 AND position = $5
+    ) THEN $5
+    ELSE (SELECT value FROM next_position)
+  END AS value
+)
 INSERT INTO exam_questions (tenant_id, exam_id, question_type, prompt, position, points, options, rubric)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-ON CONFLICT (tenant_id, exam_id, position) DO UPDATE SET question_type=EXCLUDED.question_type, prompt=EXCLUDED.prompt, points=EXCLUDED.points, options=EXCLUDED.options, rubric=EXCLUDED.rubric, updated_at=now()
+VALUES ($1,$2,$3,$4,(SELECT value FROM requested_position),$6,$7,$8)
 RETURNING id::text, exam_id::text, question_type, prompt, position, points, options, rubric`, tenantID, examID, p.QuestionType, p.Prompt, p.Position, p.Points, options, p.Rubric).Scan(&item.ID, &item.ExamID, &item.QuestionType, &item.Prompt, &item.Position, &item.Points, &raw, &item.Rubric)
 	if err != nil {
 		return item, err
 	}
 	_ = json.Unmarshal(raw, &item.Options)
 	return item, nil
+}
+
+func (repo PostgresSubmissionRepository) UpdateQuestion(ctx context.Context, tenantID, examID, questionID string, p CreateExamQuestionParams) (ExamQuestion, error) {
+	options, err := json.Marshal(p.Options)
+	if err != nil {
+		return ExamQuestion{}, err
+	}
+	var item ExamQuestion
+	var raw []byte
+	err = repo.pool.QueryRow(ctx, `
+UPDATE exam_questions
+SET question_type = $4,
+    prompt = $5,
+    position = CASE
+      WHEN $6 > 0 AND NOT EXISTS (
+        SELECT 1
+        FROM exam_questions existing
+        WHERE existing.tenant_id = $1
+          AND existing.exam_id = $2
+          AND existing.position = $6
+          AND existing.id <> exam_questions.id
+      ) THEN $6
+      ELSE exam_questions.position
+    END,
+    points = $7,
+    options = $8,
+    rubric = $9,
+    updated_at = now()
+WHERE tenant_id = $1 AND exam_id = $2 AND id = $3
+RETURNING id::text, exam_id::text, question_type, prompt, position, points, options, rubric`, tenantID, examID, questionID, p.QuestionType, p.Prompt, p.Position, p.Points, options, p.Rubric).Scan(&item.ID, &item.ExamID, &item.QuestionType, &item.Prompt, &item.Position, &item.Points, &raw, &item.Rubric)
+	if err != nil {
+		return item, err
+	}
+	_ = json.Unmarshal(raw, &item.Options)
+	return item, nil
+}
+
+func (repo PostgresSubmissionRepository) DeleteQuestion(ctx context.Context, tenantID, examID, questionID string) error {
+	_, err := repo.pool.Exec(ctx, `DELETE FROM exam_questions WHERE tenant_id = $1 AND exam_id = $2 AND id = $3`, tenantID, examID, questionID)
+	return err
 }
 
 func (repo PostgresSubmissionRepository) ListTargets(ctx context.Context, tenantID, examID string) ([]ExamTarget, error) {

@@ -24,6 +24,23 @@ export type BackendTarget = { id: string; targetType: string; targetId: string }
 export type BackendGateWindow = { id: string; targetType: string; targetId?: string; publishesAt?: string; opensAt: string; closesAt: string; password?: string };
 export type BackendPrerequisite = { id: string; prerequisiteType: string; requiredId: string };
 
+export type ExamWritePayload = {
+  title: string;
+  subjectName: string;
+  durationMinutes: number;
+  securityMode: Exam["securityMode"];
+  status: Exam["status"];
+};
+
+export type QuestionWritePayload = {
+  questionType: Question["type"];
+  prompt: string;
+  position: number;
+  points: number;
+  options?: Array<{ id: string; text: string; isCorrect: boolean }>;
+  rubric?: string;
+};
+
 const DEFAULT_EXAM_RULES = "Kerjakan mandiri. Sistem menyimpan jawaban otomatis dan submit akhir memakai digital receipt.";
 
 export function mapBackendExamToDomain(
@@ -108,6 +125,44 @@ export function mapGateWindowToDomain(window: BackendGateWindow): GateRule {
 export async function listExams(): Promise<Exam[]> {
   const response = await fetchApi<{ data: BackendExam[] }>("/api/v1/exams");
   return (response.data ?? []).map((exam) => mapBackendExamToDomain(exam));
+}
+
+export async function createExam(payload: ExamWritePayload): Promise<Exam> {
+  const response = await fetchApi<BackendExam>("/api/v1/exams", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return mapBackendExamToDomain(response);
+}
+
+export async function updateExam(examId: string, payload: ExamWritePayload): Promise<Exam> {
+  const response = await fetchApi<BackendExam>(`/api/v1/exams/${examId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  return mapBackendExamToDomain(response);
+}
+
+export async function createExamQuestion(examId: string, payload: QuestionWritePayload): Promise<Question> {
+  const response = await fetchApi<BackendQuestion>(`/api/v1/exams/${examId}/questions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return mapBackendQuestionToDomain(response);
+}
+
+export async function updateExamQuestion(examId: string, questionId: string, payload: QuestionWritePayload): Promise<Question> {
+  const response = await fetchApi<BackendQuestion>(`/api/v1/exams/${examId}/questions/${questionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  return mapBackendQuestionToDomain(response);
+}
+
+export async function deleteExamQuestion(examId: string, questionId: string): Promise<void> {
+  await fetchApi(`/api/v1/exams/${examId}/questions/${questionId}`, {
+    method: "DELETE",
+  });
 }
 
 export async function getExamDetail(examId: string): Promise<Exam> {

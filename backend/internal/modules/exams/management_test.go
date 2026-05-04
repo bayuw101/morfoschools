@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/bayuw101/morfoschools/internal/platform/authctx"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
@@ -65,6 +66,20 @@ func (repo *fakeManagementRepository) CreateQuestion(ctx context.Context, tenant
 		return ExamQuestion{}, repo.err
 	}
 	return ExamQuestion{ID: "question-1", ExamID: examID, QuestionType: params.QuestionType, Prompt: params.Prompt, Position: params.Position, Points: params.Points, Options: params.Options}, nil
+}
+func (repo *fakeManagementRepository) UpdateQuestion(ctx context.Context, tenantID, examID, questionID string, params CreateExamQuestionParams) (ExamQuestion, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedExamID = examID
+	repo.capturedQuestion = params
+	if repo.err != nil {
+		return ExamQuestion{}, repo.err
+	}
+	return ExamQuestion{ID: questionID, ExamID: examID, QuestionType: params.QuestionType, Prompt: params.Prompt, Position: params.Position, Points: params.Points, Options: params.Options}, nil
+}
+func (repo *fakeManagementRepository) DeleteQuestion(ctx context.Context, tenantID, examID, questionID string) error {
+	repo.capturedTenant = tenantID
+	repo.capturedExamID = examID
+	return repo.err
 }
 func (repo *fakeManagementRepository) ListTargets(ctx context.Context, tenantID, examID string) ([]ExamTarget, error) {
 	repo.capturedTenant = tenantID
@@ -135,6 +150,24 @@ func TestCreateExamNormalizesAndValidatesProfile(t *testing.T) {
 	}
 }
 
+func TestCreateExamUsesAuthenticatedUserAndIgnoresSpoofedCreatedBy(t *testing.T) {
+	repo := &fakeManagementRepository{}
+	handler := tenantctx.Middleware(authctx.Middleware(NewManagementHandler(repo)))
+	body := `{"title":"UTS Matematika","subjectName":"Matematika","durationMinutes":90,"securityMode":"secure_required","createdBy":"99999999-9999-4999-8999-999999999999"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/exams", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	req.Header.Set(authctx.UserIDHeader, "00000000-0000-4000-8000-000000000001")
+	req.Header.Set(authctx.UserRoleHeader, "teacher")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedExam.CreatedBy != "00000000-0000-4000-8000-000000000001" {
+		t.Fatalf("expected authenticated user id as created_by, got %+v", repo.capturedExam)
+	}
+}
+
 func TestCreateExamRejectsInvalidDuration(t *testing.T) {
 	handler := tenantctx.Middleware(NewManagementHandler(&fakeManagementRepository{}))
 	body := `{"title":"UTS","subjectName":"Matematika","durationMinutes":0}`
@@ -160,6 +193,29 @@ func TestCreateQuestionSupportsMultipleChoiceOptions(t *testing.T) {
 	}
 	if repo.capturedExamID != "exam-1" || repo.capturedQuestion.QuestionType != "multiple_choice" || len(repo.capturedQuestion.Options) != 1 {
 		t.Fatalf("unexpected question capture: %+v", repo.capturedQuestion)
+	}
+}
+
+func TestUpdateQuestionUsesQuestionIDRoute(t *testing.T) {
+	repo := &fakeManagementRepository{}
+	handler := tenantctx.Middleware(NewManagementHandler(repo))
+	body := `{"questionType":"multiple_choice","prompt":"Edited?","position":2,"points":5,"options":[{"id":"A","text":"Yes","isCorrect":true}]}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/exams/exam-1/questions/question-9", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedExamID != "exam-1" || repo.capturedQuestion.Prompt != "Edited?" {
+		t.Fatalf("unexpected question update capture: examID=%s question=%+v", repo.capturedExamID, repo.capturedQuestion)
+	}
+	var payload ExamQuestion
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ID != "question-9" {
+		t.Fatalf("expected existing question id to be preserved, got %+v", payload)
 	}
 }
 

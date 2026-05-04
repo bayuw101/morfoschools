@@ -65,8 +65,15 @@ import {
   subjectGroupOptions,
   subjectOptions,
 } from "../data";
-import { getExamDetail, listExams } from "../exam-api";
-import { fetchApi } from "@/lib/api-client";
+import {
+  createExam,
+  createExamQuestion,
+  deleteExamQuestion,
+  getExamDetail,
+  listExams,
+  updateExam,
+  updateExamQuestion,
+} from "../exam-api";
 
 export default function ExamManagerPage() {
   const params = useParams<{ id: string }>();
@@ -304,18 +311,24 @@ export default function ExamManagerPage() {
     setQuestionOpen(true);
   }
 
-  function removeQuestion(id: string) {
+  async function removeQuestion(id: string) {
     if (!selectedExamLive) return;
-    setExams((current) =>
-      current.map((item) =>
-        item.id === selectedExamLive.id
-          ? {
-              ...item,
-              questions: item.questions.filter((q) => q.id !== id),
-            }
-          : item,
-      ),
-    );
+    try {
+      await deleteExamQuestion(selectedExamLive.id, id);
+      setExams((current) =>
+        current.map((item) =>
+          item.id === selectedExamLive.id
+            ? {
+                ...item,
+                questions: item.questions.filter((q) => q.id !== id),
+              }
+            : item,
+        ),
+      );
+      toast("Question dihapus", "Soal berhasil dihapus dari backend.");
+    } catch (e) {
+      toast("Error", "Gagal menghapus question dari backend.", "error");
+    }
   }
 
   function addGateRule() {
@@ -367,54 +380,40 @@ export default function ExamManagerPage() {
 
   async function onExamSubmit(values: ExamForm) {
     const nextTargeting = deriveTargetingFromGateRules(draftGateRules);
+    const payload = {
+      title: values.title,
+      subjectName: values.subject || "Matematika X",
+      durationMinutes: parseInt(values.duration, 10) || 90,
+      securityMode: values.securityMode,
+      status: values.status,
+    };
     try {
       if (isCreatingNew) {
-        const res = await fetchApi<{ data: any }>("/api/v1/exams", {
-          method: "POST",
-          body: JSON.stringify({
-            title: values.title,
-            subjectName: values.subject || "Matematika X",
-            durationMinutes: parseInt(values.duration) || 90,
-            securityMode: values.securityMode,
-            status: values.status,
-            createdBy: "user"
-          }),
-        });
-        const newExamId = res.data?.id || `exam-${Date.now()}`;
+        const savedExam = await createExam(payload);
         const newExam: Exam = {
-          id: newExamId,
-          questions: [],
-          submissions: 0,
+          ...savedExam,
+          rules: values.rules,
           targeting: nextTargeting,
           prerequisites: draftPrerequisites,
           gateRules: draftGateRules,
-          ...values,
         };
         setExams((current) => [newExam, ...current]);
         setSelectedExam(newExam);
         setIsCreatingNew(false);
         toast("Exam dibuat", `${values.title} berhasil disimpan di sistem.`);
       } else if (selectedExamLive) {
-        await fetchApi(`/api/v1/exams/${selectedExamLive.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            title: values.title,
-            subjectName: values.subject || "Matematika X",
-            durationMinutes: parseInt(values.duration) || 90,
-            securityMode: values.securityMode,
-            status: values.status,
-            createdBy: "user"
-          }),
-        });
+        const savedExam = await updateExam(selectedExamLive.id, payload);
         setExams((current) =>
           current.map((item) =>
             item.id === selectedExamLive.id
               ? {
                   ...item,
-                  ...values,
+                  ...savedExam,
+                  rules: values.rules,
                   targeting: nextTargeting,
                   prerequisites: draftPrerequisites,
                   gateRules: draftGateRules,
+                  questions: item.questions,
                 }
               : item,
           ),
@@ -428,49 +427,68 @@ export default function ExamManagerPage() {
 
   async function onQuestionSubmit(values: QuestionForm) {
     if (!selectedExamLive) return;
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    const correctIds = values.correctOptionIds ?? [];
     const normalizedValues: QuestionForm = values.type === "multiple_choice"
       ? {
           ...values,
-          correctOptionIds: values.correctOptionIds ?? [],
-          correctOptionId: values.correctOptionIds?.[0] ?? values.correctOptionId,
-          answerKey: values.correctOptionIds?.length
-            ? values.correctOptionIds.join(", ")
-            : values.answerKey,
+          correctOptionIds: correctIds,
+          correctOptionId: correctIds[0] ?? values.correctOptionId,
+          answerKey: correctIds.length ? correctIds.join(", ") : values.answerKey,
           scoringMode: values.scoringMode ?? "all_or_nothing",
         }
       : values;
 
-    if (editingQuestion) {
-      setExams((current) =>
-        current.map((item) =>
-          item.id === selectedExamLive.id
-            ? {
-                ...item,
-                questions: item.questions.map((q) =>
-                  q.id === editingQuestion.id ? { ...q, ...normalizedValues } : q,
-                ),
-              }
-            : item,
-        ),
-      );
-    } else {
-      const newQ: Question = {
-        ...normalizedValues,
-        id: `q-${Date.now()}`,
+    try {
+      const payload = {
+        questionType: normalizedValues.type,
+        prompt: normalizedValues.prompt,
+        position: editingQuestion
+          ? selectedExamLive.questions.findIndex((question) => question.id === editingQuestion.id) + 1
+          : selectedExamLive.questions.length + 1,
+        points: parseInt(normalizedValues.points, 10) || 1,
+        options: normalizedValues.type === "multiple_choice"
+          ? (normalizedValues.options ?? []).map((option) => ({
+              id: option.id,
+              text: option.text,
+              isCorrect: correctIds.includes(option.id),
+            }))
+          : [],
+        rubric: normalizedValues.answerKey,
       };
-      setExams((current) =>
-        current.map((item) =>
-          item.id === selectedExamLive.id
-            ? {
-                ...item,
-                questions: [...item.questions, newQ],
-              }
-            : item,
-        ),
-      );
+      const savedQuestion = editingQuestion
+        ? await updateExamQuestion(selectedExamLive.id, editingQuestion.id, payload)
+        : await createExamQuestion(selectedExamLive.id, payload);
+
+      if (editingQuestion) {
+        setExams((current) =>
+          current.map((item) =>
+            item.id === selectedExamLive.id
+              ? {
+                  ...item,
+                  questions: item.questions.map((q) =>
+                    q.id === editingQuestion.id ? savedQuestion : q,
+                  ),
+                }
+              : item,
+          ),
+        );
+      } else {
+        setExams((current) =>
+          current.map((item) =>
+            item.id === selectedExamLive.id
+              ? {
+                  ...item,
+                  questions: [...item.questions, savedQuestion],
+                }
+              : item,
+          ),
+        );
+      }
+      setQuestionOpen(false);
+      toast(editingQuestion ? "Question diperbarui" : "Question ditambahkan", "Soal berhasil disimpan ke backend.");
+    } catch (e) {
+      toast("Error", "Gagal menyimpan question ke backend.", "error");
     }
-    setQuestionOpen(false);
   }
 
   return (
@@ -1106,10 +1124,14 @@ export default function ExamManagerPage() {
                       label={`Option ${option.id}`}
                       value={option.text}
                       onChange={(e) => {
-                        const opts =
-                          questionForm.getValues("options") || [];
-                        opts[index].text = e.target.value;
-                        questionForm.setValue("options", opts);
+                        const opts = questionForm.getValues("options") || [];
+                        questionForm.setValue(
+                          "options",
+                          opts.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, text: e.target.value } : item,
+                          ),
+                          { shouldDirty: true, shouldTouch: true, shouldValidate: true },
+                        );
                       }}
                     />
                   </div>

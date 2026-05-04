@@ -4,10 +4,11 @@ import React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { BookOpen, Edit3, GraduationCap, Layers3, Plus, Search, UserPlus, Users } from "lucide-react";
+import { BookOpen, Edit3, GraduationCap, Layers3, Plus, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
@@ -90,6 +91,7 @@ export default function SubjectGroupsPage() {
   const [membersOpen, setMembersOpen] = React.useState(false);
   const [editingGroup, setEditingGroup] = React.useState<SubjectGroup | null>(null);
   const [selectedGroup, setSelectedGroup] = React.useState<SubjectGroup | null>(null);
+  const [confirmGroup, setConfirmGroup] = React.useState<SubjectGroup | null>(null);
   const [query, setQuery] = React.useState("");
   const [classFilter, setClassFilter] = React.useState("all");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
@@ -132,6 +134,17 @@ export default function SubjectGroupsPage() {
       toast("Subject group dibuat", `${values.name} siap menerima siswa lintas kelas.`);
     }
     setSheetOpen(false);
+  }
+
+  function deleteGroup() {
+    if (!confirmGroup) return;
+    fetchApi(`/api/v1/academic/subject-groups/${confirmGroup.id}`, { method: "DELETE" })
+      .then(() => {
+        setGroups((current) => current.filter((group) => group.id !== confirmGroup.id));
+        toast("Subject group dihapus", `${confirmGroup.name} berhasil dihapus.`);
+        setConfirmGroup(null);
+      })
+      .catch((error) => toast("Delete gagal", (error as Error).message, "warning"));
   }
 
   function toggleStudent(studentId: string) {
@@ -180,10 +193,15 @@ export default function SubjectGroupsPage() {
       <Panel className="overflow-hidden p-0">
         <div className="grid gap-3 border-b border-[color:var(--border)] px-5 py-3 lg:grid-cols-[1fr_280px] lg:items-center">
           <h2 className="font-display text-xl font-semibold">Subject Group Directory</h2>
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--muted-foreground)]" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search subject group" className="h-11 w-full rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] pl-9 pr-3 text-sm outline-none transition focus:border-[color:var(--brand)] focus:ring-4 focus:ring-[color:var(--brand-soft)]" />
-          </label>
+          <div className="flex h-11 items-center gap-2 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-3">
+            <Search className="h-4 w-4 text-[color:var(--muted-foreground)]" />
+            <input
+              className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--muted-foreground)]"
+              placeholder="Search subject group"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingGroups ? (
@@ -204,6 +222,7 @@ export default function SubjectGroupsPage() {
               <div className="flex flex-wrap justify-end gap-2">
                 <Button size="sm" variant="secondary" onClick={() => openMembers(group)}><UserPlus className="h-4 w-4" /> Members</Button>
                 <Button size="sm" variant="secondary" onClick={() => openEdit(group)}><Edit3 className="h-4 w-4" /> Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => setConfirmGroup(group)}><Trash2 className="h-4 w-4" /> Delete</Button>
               </div>
             </div>
           ))}
@@ -233,6 +252,17 @@ export default function SubjectGroupsPage() {
           </div>
         </div>
       </RightPullSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmGroup)}
+        onOpenChange={(open) => !open && setConfirmGroup(null)}
+        title="Delete subject group?"
+        description="Rombel akademik ini akan dihapus dari backend tenant aktif."
+        confirmLabel="Delete Group"
+        tone="danger"
+        onConfirm={deleteGroup}
+        details={confirmGroup ? `${confirmGroup.name} • ${confirmGroup.academicYear}` : undefined}
+      />
 
       <div className="fixed bottom-5 right-5 z-[95] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-3">
         {toasts.map((item) => <Toast key={item.id} toast={item} onDismiss={(id) => setToasts((current) => current.filter((toastItem) => toastItem.id !== id))} />)}

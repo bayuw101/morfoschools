@@ -4,10 +4,11 @@ import React from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { BookUser, CalendarDays, Edit3, GraduationCap, Plus, School, Search, UserPlus, Users } from "lucide-react";
+import { BookUser, CalendarDays, Edit3, GraduationCap, Plus, School, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
@@ -79,6 +80,7 @@ export default function ClassesPage() {
   const [manageOpen, setManageOpen] = React.useState(false);
   const [editingClass, setEditingClass] = React.useState<ClassSection | null>(null);
   const [selectedClass, setSelectedClass] = React.useState<ClassSection | null>(null);
+  const [confirmClass, setConfirmClass] = React.useState<ClassSection | null>(null);
   const [query, setQuery] = React.useState("");
   const [studentQuery, setStudentQuery] = React.useState("");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
@@ -138,6 +140,13 @@ const method = editingClass ? "PATCH" : "POST";
     } catch (error) {
       toast("Error", (error as Error).message, "warning");
     }
+  }
+
+  function deleteClass() {
+    if (!confirmClass) return;
+    fetchApi(`/api/v1/classes/${confirmClass.id}`, { method: "DELETE" })
+      .then(() => setClasses((current) => current.filter((item) => item.id !== confirmClass.id)))
+      .finally(() => setConfirmClass(null));
   }
 
   function toggleStudent(student: Student) {
@@ -224,6 +233,7 @@ const method = editingClass ? "PATCH" : "POST";
               <div className="flex flex-wrap justify-end gap-2">
                 <Button size="sm" variant="secondary" onClick={() => openManage(item)}><UserPlus className="h-4 w-4" /> Students</Button>
                 <Button size="sm" variant="secondary" onClick={() => openEdit(item)}><Edit3 className="h-4 w-4" /> Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => setConfirmClass(item)}><Trash2 className="h-4 w-4" /> Delete</Button>
               </div>
             </div>
           )) : (
@@ -287,6 +297,17 @@ const method = editingClass ? "PATCH" : "POST";
           </div>
         </div>
       </RightPullSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmClass)}
+        onOpenChange={(open) => !open && setConfirmClass(null)}
+        title="Delete class section?"
+        description="Class section ini akan dihapus dari backend tenant aktif."
+        confirmLabel="Delete Class"
+        tone="danger"
+        onConfirm={deleteClass}
+        details={confirmClass ? `${confirmClass.name} • ${confirmClass.academicYear}` : undefined}
+      />
 
       <div className="fixed bottom-5 right-5 z-[95] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-3">
         {toasts.map((item) => <Toast key={item.id} toast={item} onDismiss={(id) => setToasts((current) => current.filter((toastItem) => toastItem.id !== id))} />)}

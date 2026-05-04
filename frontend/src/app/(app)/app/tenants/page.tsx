@@ -7,6 +7,7 @@ import * as z from "zod";
 import {
   Building2,
   Edit3,
+  Trash2,
   MapPin,
   Plus,
   School,
@@ -17,6 +18,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
@@ -86,6 +88,7 @@ export default function TenantsPage() {
   const metrics = calculateTenantMetrics(tenants);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingTenant, setEditingTenant] = React.useState<Tenant | null>(null);
+  const [confirmTenant, setConfirmTenant] = React.useState<Tenant | null>(null);
 
   React.useEffect(() => {
     fetchApi<{ data: Tenant[] }>("/api/v1/tenants")
@@ -121,6 +124,13 @@ export default function TenantsPage() {
       studentCap: tenant.studentCap,
     });
     setSheetOpen(true);
+  }
+
+  function deleteTenant() {
+    if (!confirmTenant) return;
+    fetchApi(`/api/v1/tenants/${confirmTenant.id}`, { method: "DELETE" })
+      .then(() => setTenants((current) => current.filter((tenant) => tenant.id !== confirmTenant.id)))
+      .finally(() => setConfirmTenant(null));
   }
 
   async function onSubmit(values: TenantForm) {
@@ -245,13 +255,18 @@ export default function TenantsPage() {
               <Badge variant={health.tone}>
                 {health.label}
               </Badge>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => openEdit(tenant)}
-              >
-                <Edit3 className="h-4 w-4" /> Edit
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => openEdit(tenant)}
+                >
+                  <Edit3 className="h-4 w-4" /> Edit
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => setConfirmTenant(tenant)}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
+              </div>
             </div>
             );
           })}
@@ -340,6 +355,17 @@ export default function TenantsPage() {
           </InputGroup>
         </form>
       </RightPullSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmTenant)}
+        onOpenChange={(open) => !open && setConfirmTenant(null)}
+        title="Delete tenant?"
+        description="Tenant sekolah ini akan dihapus dari backend. Pastikan tidak ada data aktif yang masih dibutuhkan."
+        confirmLabel="Delete Tenant"
+        tone="danger"
+        onConfirm={deleteTenant}
+        details={confirmTenant ? `${confirmTenant.name} • ${confirmTenant.slug}` : undefined}
+      />
     </div>
   );
 }

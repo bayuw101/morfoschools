@@ -15,11 +15,13 @@ import {
   Search,
   ShieldCheck,
   Timer,
+  Trash2,
   Users,
 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MetricCard } from "@/components/ui/metric-card";
 import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
@@ -31,6 +33,7 @@ export default function ExamsPage() {
   const [query, setQuery] = React.useState("");
   const [exams, setExams] = React.useState<Exam[]>([]);
   const [loadingExams, setLoadingExams] = React.useState(true);
+  const [confirmExam, setConfirmExam] = React.useState<Exam | null>(null);
   React.useEffect(() => {
     fetchApi<{ data: any[] }>("/api/v1/exams")
       .then(res => {
@@ -60,6 +63,13 @@ export default function ExamsPage() {
   const filteredExams = filterExams(exams, query);
   const metrics = calculateExamMetrics(exams);
   const emptyState = getExamEmptyState(query);
+
+  function deleteExam() {
+    if (!confirmExam) return;
+    fetchApi(`/api/v1/exams/${confirmExam.id}`, { method: "DELETE" })
+      .then(() => setExams((current) => current.filter((exam) => exam.id !== confirmExam.id)))
+      .finally(() => setConfirmExam(null));
+  }
 
   return (
     <div className="space-y-8 pb-12">
@@ -221,12 +231,26 @@ export default function ExamsPage() {
                     <Edit3 className="h-4 w-4" /> Manage
                   </Button>
                 </Link>
+                <Button size="sm" variant="danger" onClick={() => setConfirmExam(exam)}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
               </div>
             </div>
             );
           })}
         </div>
       </Panel>
+
+      <ConfirmDialog
+        open={Boolean(confirmExam)}
+        onOpenChange={(open) => !open && setConfirmExam(null)}
+        title="Delete exam?"
+        description="Exam ini akan dihapus dari backend tenant aktif."
+        confirmLabel="Delete Exam"
+        tone="danger"
+        onConfirm={deleteExam}
+        details={confirmExam ? `${confirmExam.title} • ${confirmExam.subject}` : undefined}
+      />
     </div>
   );
 }

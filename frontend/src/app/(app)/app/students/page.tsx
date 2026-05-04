@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   BookOpenCheck,
   Edit3,
+  Trash2,
   GraduationCap,
   Mail,
   Plus,
@@ -21,6 +22,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -122,6 +124,7 @@ export default function StudentsPage() {
   const [query, setQuery] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
+  const [confirmStudent, setConfirmStudent] = React.useState<Student | null>(null);
 
   const {
     register,
@@ -175,6 +178,13 @@ const method = editingStudent ? "PATCH" : "POST";
     } catch (error) {
       console.error(error);
     }
+  }
+
+  function deleteStudent() {
+    if (!confirmStudent) return;
+    fetchApi(`/api/v1/students/${confirmStudent.id}`, { method: "DELETE" })
+      .then(() => setStudents((current) => current.filter((student) => student.id !== confirmStudent.id)))
+      .finally(() => setConfirmStudent(null));
   }
 
   const metrics = calculateStudentMetrics(students);
@@ -265,9 +275,14 @@ const method = editingStudent ? "PATCH" : "POST";
                 <span className="font-medium text-[color:var(--foreground)]">{student.courses} courses</span>
                 <br /> {student.exams} exams eligible
               </div>
-              <Button size="sm" variant="secondary" onClick={() => openEdit(student)}>
-                <Edit3 className="h-4 w-4" /> Manage
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button size="sm" variant="secondary" onClick={() => openEdit(student)}>
+                  <Edit3 className="h-4 w-4" /> Manage
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => setConfirmStudent(student)}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -324,6 +339,17 @@ const method = editingStudent ? "PATCH" : "POST";
           </div>
         </form>
       </RightPullSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmStudent)}
+        onOpenChange={(open) => !open && setConfirmStudent(null)}
+        title="Delete student?"
+        description="Master data siswa ini akan dihapus dari backend tenant aktif."
+        confirmLabel="Delete Student"
+        tone="danger"
+        onConfirm={deleteStudent}
+        details={confirmStudent ? `${confirmStudent.name} • NISN ${confirmStudent.nisn}` : undefined}
+      />
     </div>
   );
 }

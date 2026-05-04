@@ -77,6 +77,7 @@
 *   Implementation note: Added `/app/courses` teacher review surface with Course CRUD, module management drawer, metadata-only YouTube/Google Drive resource linking, BYO storage guardrails, and local mock state.
 *   Implementation note: Course audience assignment corrected to support multiple Subject Groups, multiple Class Sections, and individual Students, matching exam targeting expectations.
 *   Implementation note: Audience Assignment UI redesigned from chip wall into scalable selector cards with counts and selected-target lists for schools with many classes/users.
+*   Backend note: Added Course Foundation APIs with TDD for `GET/POST /api/v1/courses`, `GET/POST /api/v1/courses/{course_id}/modules`, `GET/POST /api/v1/course-modules/{module_id}/resources`, and `POST /api/v1/course-progress-events`. Schema stores resource metadata/external URLs only, keeping Google Drive/YouTube outside the LMS critical path.
 
 ### ISSUE-007.1: Google OAuth + Teacher-Owned Uploads
 *   Tambahkan OAuth Google agar guru bisa menghubungkan akun Google mereka sendiri.

@@ -49,11 +49,11 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `teaching_assignments`
   - [x] `subject_groups`
   - [x] `subject_group_members`
-- [ ] Course tables:
-  - [ ] `courses`
-  - [ ] `course_modules`
-  - [ ] `course_resources`
-  - [ ] `course_progress_events`
+- [x] Course tables:
+  - [x] `courses`
+  - [x] `course_modules`
+  - [x] `course_resources`
+  - [x] `course_progress_events`
 - [~] Exam core tables:
   - [x] `exams`
   - [ ] `exam_questions`
@@ -107,6 +107,16 @@ Start small with tenancy + health.
 - [x] `GET /api/v1/academic/subject-groups/{group_id}/members` lists cross-class group members
 - [x] `POST /api/v1/academic/subject-groups/{group_id}/members` adds/reactivates a student membership
 
+## Phase BE-5 — Course Foundation
+
+- [x] `GET /api/v1/courses` lists tenant-scoped courses with module counts
+- [x] `POST /api/v1/courses` creates/updates courses linked to `course_offerings`
+- [x] `GET /api/v1/courses/{course_id}/modules` lists course modules
+- [x] `POST /api/v1/courses/{course_id}/modules` creates/updates ordered modules
+- [x] `GET /api/v1/course-modules/{module_id}/resources` lists module resources
+- [x] `POST /api/v1/course-modules/{module_id}/resources` creates/updates metadata-only resources
+- [x] `POST /api/v1/course-progress-events` records low-cost evidence trail events for prerequisites/monitoring
+
 ## Verification
 
 - [x] `docker compose config`
@@ -130,3 +140,4 @@ Start small with tenancy + health.
 - 2026-05-04: Added lightweight auth context and role authorization middleware. `authctx.Middleware` reads `X-User-ID`/`X-User-Role`, stores the authenticated user in request context, and `RequireRoles(...)` returns `401 user_required` or `403 role_forbidden` for protected routes. This is a temporary boundary until proper session/JWT tokens are implemented.
 - 2026-05-04: Completed BE-4 academic foundation slice. Added `subjects`, `course_offerings`, and `teaching_assignments` migration plus TDD-covered academic handlers/repository for subject CRUD, subject-to-class course offerings, and teacher assignments. This preserves the administrative-vs-academic model: `class_sections` remain administrative, while `course_offerings` link classes to subjects for learning/exam targeting.
 - 2026-05-04: Completed subject group membership backend. Added `subject_groups` and `subject_group_members` migration plus TDD-covered APIs for flexible cross-class academic groups and student membership, enabling lintas minat/remedial/enrichment targeting without changing administrative class enrollment.
+- 2026-05-04: Completed BE-5 course foundation. Added `courses`, `course_modules`, `course_resources`, and `course_progress_events` migration plus TDD-covered APIs for course/module/resource management and progress evidence events. Resources store metadata/external URLs only so Google Drive/YouTube remain outside LMS critical path.

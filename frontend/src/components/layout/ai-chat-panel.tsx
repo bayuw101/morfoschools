@@ -11,10 +11,26 @@ type ChatMessage = {
 };
 
 const suggestions = [
-  "/jadwal-ujian",
-  'Bantu siapkan /tambah-kelas {"name":"X-A","gradeLevel":"10","academicYear":"2025/2026","homeroomTeacher":"","status":"active","studentIds":[]}',
-  'Bantu siapkan /create-exam {"title":"UTS Matematika X","subjectName":"Matematika","status":"draft","durationMinutes":90,"securityMode":"standard"}',
-  'Bantu siapkan /add-question {examId} {"questionType":"multiple_choice","prompt":"...","position":1,"points":10,"options":[{"id":"a","text":"...","isCorrect":true}],"rubric":""}',
+  {
+    title: "Cek jadwal ujian",
+    description: "Lihat daftar exam dan gate window terbaru dari backend.",
+    prompt: "/jadwal-ujian",
+  },
+  {
+    title: "Tambah kelas baru",
+    description: "AI akan bantu susun data kelas dan validasi wali kelas/guru terlebih dahulu.",
+    prompt: 'Bantu aku tambah kelas baru. Tanyakan nama kelas, grade, tahun ajaran, dan wali kelas. Jika guru belum ada, tawarkan kandidat guru atau buatkan data guru dulu.',
+  },
+  {
+    title: "Buat exam",
+    description: "Siapkan draft ujian lengkap dengan mapel, durasi, status, dan security mode.",
+    prompt: 'Bantu aku buat exam baru. Tanyakan judul, mata pelajaran, durasi, status, dan security mode, lalu susun command /create-exam yang siap dieksekusi.',
+  },
+  {
+    title: "Tambah soal",
+    description: "Bantu buat soal pilihan ganda atau essay untuk exam yang sudah ada.",
+    prompt: 'Bantu aku tambah soal ke exam. Tanyakan examId, tipe soal, prompt, poin, opsi jawaban, dan kunci/rubrik, lalu susun command /add-question yang siap dieksekusi.',
+  },
 ];
 
 const initialMessages: ChatMessage[] = [
@@ -116,13 +132,14 @@ export function AiChatPanel() {
           <div className="space-y-2">
             {suggestions.map((suggestion) => (
               <button
-                key={suggestion}
+                key={suggestion.title}
                 type="button"
                 disabled={isSending}
-                onClick={() => void sendMessage(suggestion)}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-left text-xs font-medium leading-5 text-[#f0f4fb] transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void sendMessage(suggestion.prompt)}
+                className="group w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {suggestion}
+                <span className="block text-sm font-bold leading-5 text-[#f5f7fb]">{suggestion.title}</span>
+                <span className="mt-1 block text-xs leading-5 text-[#9caeca] group-hover:text-[#cfe0ff]">{suggestion.description}</span>
               </button>
             ))}
           </div>

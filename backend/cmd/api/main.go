@@ -57,7 +57,9 @@ func main() {
 		mux.Handle("/api/v1/exams", examRouter)
 		mux.Handle("/api/v1/exams/", examRouter)
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))
-		startSubmissionRelay(context.Background(), cfg.NATSURL, examRepo)
+		backgroundCtx := context.Background()
+		startSubmissionRelay(backgroundCtx, cfg.NATSURL, examRepo)
+		startGradingWorker(backgroundCtx, examRepo)
 	}
 
 	server := authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
@@ -90,6 +92,29 @@ func startSubmissionRelay(ctx context.Context, natsURL string, repo exams.Postgr
 				}
 				if relayed > 0 {
 					log.Printf("exam submission relay published %d inbox rows", relayed)
+				}
+			}
+		}
+	}()
+}
+
+func startGradingWorker(ctx context.Context, repo exams.PostgresSubmissionRepository) {
+	worker := exams.NewGradingWorker(repo)
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				graded, err := worker.GradePendingOnce(ctx, repo, 25)
+				if err != nil {
+					log.Printf("exam grading worker failed: %v", err)
+					continue
+				}
+				if graded > 0 {
+					log.Printf("exam grading worker processed %d final submissions", graded)
 				}
 			}
 		}

@@ -156,6 +156,7 @@
 ### ISSUE-014: Async Grading Worker
 *   NATS Consumer untuk auto-grade Multiple Choice.
 *   Update final status: `COMPLETED` atau `WAITING_FOR_GRADING`.
+*   Backend note: Added async grading foundation with TDD. Final submissions are picked from the inbox path, multiple-choice answers are auto-scored from `exam_questions.answer_key`, results are stored idempotently in `exam_grade_results`, MC-only attempts become `completed`, and essay/mixed attempts become `waiting_for_grading` while preserving auto-scored portions.
 
 ### ISSUE-015: Manual Essay Grading Dashboard
 *   UI Guru untuk menilai jawaban essay yang tertunda.

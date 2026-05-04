@@ -145,6 +145,13 @@ Start small with tenancy + health.
 - [x] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` records fullscreen/tab/window/network/copy-paste violations as append-only tenant-scoped events
 - [x] `exam_security_events` indexes support attempt-level audit and teacher monitoring dashboards
 
+## Phase BE-9 — Async Grading Worker
+
+- [x] `exam_questions.answer_key` stores MC answer keys for automatic grading
+- [x] `exam_grade_results` stores idempotent per-receipt grading outcomes, auto score, max score, manual-grading flag, and question-level result JSON
+- [x] Background grading worker polls ungraded final submissions from the inbox path and records `completed` for fully auto-gradable MC exams
+- [x] Mixed/essay exams move attempts to `waiting_for_grading` while preserving the automatically scored portion
+
 ## Verification
 
 - [x] `docker compose config`
@@ -172,3 +179,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-6 exam management foundation. Added `exam_questions`, `exam_targets`, `exam_gate_windows`, and `exam_prerequisites` migration plus TDD-covered APIs for exam profiles, authoring, target rules, gate scheduling, and prerequisite rules. Ingestion endpoints remain routed through the same `/api/v1/exams/.../attempts/...` path for the exam critical path.
 - 2026-05-04: Completed BE-7 eligibility materialization API. Added TDD-covered `GET /api/v1/exams/{exam_id}/eligibility` and `POST /api/v1/exams/{exam_id}/eligibility/recalculate`, using exam targets + prerequisites to materialize `exam_eligible_students` before runtime exam spikes.
 - 2026-05-04: Completed BE-8 exam gate and security events. Added TDD-covered `POST /api/v1/exams/{exam_id}/gate/check` for materialized eligibility + gate-window/password checks, plus `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` and `exam_security_events` for append-only exam-mode violation audit.
+- 2026-05-04: Completed BE-9 async grading worker. Added MC answer keys, `exam_grade_results`, TDD-covered grading logic for final submissions, auto-score completion for MC-only exams, and `waiting_for_grading` status for essay/mixed exams.

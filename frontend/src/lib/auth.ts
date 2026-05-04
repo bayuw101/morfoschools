@@ -1,8 +1,12 @@
 // ── Auth session management & API client ────────────────────
 // Lightweight, no external deps. Works with localStorage (browser)
 // or any Storage-like object (tests).
+// Token is also mirrored to a cookie so Next.js middleware (Edge)
+// can read it for route protection.
 
 const SESSION_KEY = "morfoschools_session";
+export const AUTH_TOKEN_COOKIE = "morfoschools_token";
+const TOKEN_COOKIE = AUTH_TOKEN_COOKIE;
 
 // ── Types ───────────────────────────────────────────────────
 export type AuthSession = {
@@ -39,6 +43,11 @@ function defaultStorage(): SessionStorage | null {
 export function storeSession(session: AuthSession, storage?: SessionStorage | null): void {
   const s = storage ?? defaultStorage();
   s?.setItem(SESSION_KEY, JSON.stringify(session));
+  // Mirror token to cookie for Next.js middleware (Edge runtime)
+  if (typeof document !== "undefined") {
+    const expires = new Date(session.expiresAt).toUTCString();
+    document.cookie = `${TOKEN_COOKIE}=${session.token}; path=/; expires=${expires}; SameSite=Lax`;
+  }
 }
 
 export function getSession(storage?: SessionStorage | null): AuthSession | null {
@@ -55,6 +64,10 @@ export function getSession(storage?: SessionStorage | null): AuthSession | null 
 export function clearSession(storage?: SessionStorage | null): void {
   const s = storage ?? defaultStorage();
   s?.removeItem(SESSION_KEY);
+  // Remove cookie
+  if (typeof document !== "undefined") {
+    document.cookie = `${TOKEN_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  }
 }
 
 export function isAuthenticated(storage?: SessionStorage | null): boolean {

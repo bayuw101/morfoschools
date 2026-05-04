@@ -80,9 +80,9 @@ Start small with tenancy + health.
 ## Phase BE-2 — Exam Critical Path
 
 - [ ] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/autosave`
-- [ ] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit`
-- [ ] write submit payload to `exam_submission_inbox`
-- [ ] return deterministic digital receipt immediately
+- [x] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit`
+- [x] write submit payload to `exam_submission_inbox`
+- [x] return digital receipt immediately
 - [ ] relay inbox rows to NATS JetStream asynchronously
 
 ## Verification
@@ -100,3 +100,4 @@ Start small with tenancy + health.
 ## Progress Log
 
 - 2026-05-04: Completed BE-1 tenancy vertical slice. Added `internal/platform/db`, `internal/platform/tenantctx`, and `internal/modules/tenancy`; wired `cmd/api` to health/readiness plus DB-backed tenant list/create endpoints; verified Docker Go tests, backend image build, full compose runtime, health/readiness, and tenant CRUD smoke test.
+- 2026-05-04: Started BE-2 exam critical path. Added TDD coverage and implementation for `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit`, storing raw payloads in `exam_submission_inbox`, recording `exam_submission_receipts`, and returning an immediate `202 Accepted` digital receipt. Verified backend tests, backend image build, compose runtime, and submit smoke test.

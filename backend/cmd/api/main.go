@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bayuw101/morfoschools/internal/modules/exams"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
 	"github.com/bayuw101/morfoschools/internal/platform/config"
 	"github.com/bayuw101/morfoschools/internal/platform/db"
@@ -33,7 +34,9 @@ func main() {
 	mux.Handle("/healthz", httpserver.NewRouter(dbPool))
 	mux.Handle("/readyz", httpserver.NewRouter(dbPool))
 	if dbPool != nil {
-		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(dbPool.PgxPool())))
+		pgxPool := dbPool.PgxPool()
+		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
+		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(exams.NewPostgresSubmissionRepository(pgxPool)))
 	}
 
 	server := tenantctx.Middleware(withCORS(mux))

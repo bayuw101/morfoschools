@@ -137,6 +137,7 @@
 *   API endpoint untuk submit yang mengembalikan Digital Receipt (receipt_id).
 *   Relay submission data ke NATS JetStream.
 *   Implementation note: Added `/app/exams/[id]/monitor` live dashboard review surface to visualize the ingestion shock absorber. Includes metrics for active/offline students, NATS inbox queue processing simulation, and a live feed of student submits and security violations.
+*   Backend note: Added first exam ingestion API slice with TDD: `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit` now requires tenant context, validates payload, appends raw JSON to `exam_submission_inbox`, records `exam_submission_receipts`, and returns immediate `202 Accepted` digital receipt.
 
 ## Epic 5: Grading & Analytics
 *Tujuan: Penilaian otomatis dan manual essay.*

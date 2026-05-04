@@ -96,6 +96,15 @@ function normalizeStudentRecord(student: Partial<Student>): Student {
   };
 }
 
+function dedupeStudentsById(items: Student[]): Student[] {
+  const seen = new Set<string>();
+  return items.filter((student) => {
+    if (seen.has(student.id)) return false;
+    seen.add(student.id);
+    return true;
+  });
+}
+
 export default function StudentsPage() {
   const [students, setStudents] = React.useState<Student[]>([]);
   const [classOptions, setClassOptions] = React.useState<ClassOption[]>([]);
@@ -104,7 +113,7 @@ export default function StudentsPage() {
   React.useEffect(() => {
     Promise.all([listStudents(), listClassOptions()])
       .then(([items, options]) => {
-        setStudents(items.map(normalizeStudentRecord));
+        setStudents(dedupeStudentsById(items.map(normalizeStudentRecord)));
         setClassOptions(options);
       })
       .catch((err) => console.error("Failed to fetch", err))
@@ -164,9 +173,15 @@ export default function StudentsPage() {
 
       const normalizedSaved = normalizeStudentRecord(saved);
       if (editingStudent) {
-        setStudents((current) => current.map((student) => student.id === editingStudent.id ? normalizeStudentRecord({ ...student, ...normalizedSaved }) : student));
+        setStudents((current) =>
+          dedupeStudentsById(
+            current.map((student) =>
+              student.id === editingStudent.id ? normalizeStudentRecord({ ...student, ...normalizedSaved }) : student,
+            ),
+          ),
+        );
       } else {
-        setStudents((current) => [normalizedSaved, ...current]);
+        setStudents((current) => dedupeStudentsById([normalizedSaved, ...current]));
       }
       setSheetOpen(false);
     } catch (error) {

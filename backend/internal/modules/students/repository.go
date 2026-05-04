@@ -26,10 +26,15 @@ SELECT students.id::text,
        COALESCE(class_sections.name, '')
 FROM students
 LEFT JOIN users ON users.id = students.user_id
-LEFT JOIN student_class_enrollments enrollments
-  ON enrollments.tenant_id = students.tenant_id
- AND enrollments.student_id = students.id
- AND enrollments.active = true
+LEFT JOIN LATERAL (
+    SELECT enrollment.class_section_id
+    FROM student_class_enrollments enrollment
+    WHERE enrollment.tenant_id = students.tenant_id
+      AND enrollment.student_id = students.id
+      AND enrollment.active = true
+    ORDER BY enrollment.created_at DESC, enrollment.id DESC
+    LIMIT 1
+) enrollments ON true
 LEFT JOIN class_sections ON class_sections.id = enrollments.class_section_id
 WHERE students.tenant_id = $1
 ORDER BY students.created_at DESC`, tenantID)
@@ -121,6 +126,17 @@ WITH class_match AS (
     JOIN updated_user ON updated_user.id = update_candidate.user_id
     WHERE students.id = update_candidate.id AND students.tenant_id = $1
     RETURNING students.id, students.user_id, students.nisn, students.name, students.status, students.guardian_name, students.guardian_contact
+), deactivated_enrollments AS (
+    UPDATE student_class_enrollments enrollments
+    SET active = false
+    FROM updated_student
+    JOIN update_candidate ON update_candidate.id = updated_student.id
+    WHERE enrollments.tenant_id = $1
+      AND enrollments.student_id = updated_student.id
+      AND enrollments.academic_year = update_candidate.academic_year
+      AND enrollments.active = true
+      AND enrollments.class_section_id <> update_candidate.class_section_id
+    RETURNING enrollments.id
 ), enrollment AS (
     INSERT INTO student_class_enrollments (tenant_id, student_id, class_section_id, academic_year, active)
     SELECT $1, updated_student.id, update_candidate.class_section_id, update_candidate.academic_year, true

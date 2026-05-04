@@ -240,3 +240,38 @@ func TestRecordProgressEventRejectsInvalidEventType(t *testing.T) {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestUpdateCourseCapturesTenantAndCourseID(t *testing.T) {
+	repo := &fakeCourseRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	body := `{"courseOfferingId":"offering-1","title":"Updated Course","description":"Updated description","status":"published"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/courses/course-1", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" || repo.capturedCourseID != "course-1" || repo.capturedCourse.Title != "Updated Course" {
+		t.Fatalf("unexpected update capture tenant=%q id=%q params=%+v", repo.capturedTenant, repo.capturedCourseID, repo.capturedCourse)
+	}
+}
+
+func TestDeleteCourseCapturesTenantAndCourseID(t *testing.T) {
+	repo := &fakeCourseRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/courses/course-1", nil)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" || repo.capturedCourseID != "course-1" {
+		t.Fatalf("unexpected delete capture tenant=%q id=%q", repo.capturedTenant, repo.capturedCourseID)
+	}
+}

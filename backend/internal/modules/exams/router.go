@@ -3,6 +3,8 @@ package exams
 import (
 	"net/http"
 	"strings"
+
+	"github.com/bayuw101/morfoschools/internal/platform/authctx"
 )
 
 type Router struct {
@@ -16,7 +18,7 @@ type Router struct {
 }
 
 func NewRouter(repo PostgresSubmissionRepository) http.Handler {
-	return Router{
+	return WithPermission(Router{
 		management:    NewManagementHandler(repo),
 		eligibility:   NewEligibilityHandler(repo),
 		gate:          NewGateHandler(repo),
@@ -24,7 +26,32 @@ func NewRouter(repo PostgresSubmissionRepository) http.Handler {
 		result:        NewResultHandler(repo),
 		monitor:       NewMonitorHandler(repo),
 		ingestion:     NewIngestionHandler(repo),
+	})
+}
+
+func WithPermission(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		permission := PermissionForPath(r.URL.Path)
+		if permission == "" {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return
+		}
+		authctx.RequirePermission(permission)(next).ServeHTTP(w, r)
+	})
+}
+
+func PermissionForPath(path string) authctx.Permission {
+	trimmed := strings.TrimSuffix(path, "/")
+	if trimmed == "/api/v1/exams" || isManagementResourcePath(trimmed) || isManagementChildPath(trimmed) || isEligibilityPath(trimmed) || isManualGradingPath(trimmed) || isMonitorPath(trimmed) {
+		return authctx.ManageExams
 	}
+	if isGatePath(trimmed) || isIngestionPath(trimmed) {
+		return authctx.TakeExams
+	}
+	if isResultPath(trimmed) {
+		return authctx.ViewExamResults
+	}
+	return ""
 }
 
 func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -106,4 +133,9 @@ func isResultPath(path string) bool {
 func isMonitorPath(path string) bool {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	return len(parts) == 5 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "monitor"
+}
+
+func isIngestionPath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	return len(parts) == 7 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "attempts" && (parts[6] == "autosave" || parts[6] == "submit")
 }

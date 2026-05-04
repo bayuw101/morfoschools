@@ -23,8 +23,9 @@ import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { TextareaField } from "@/components/ui/textarea-field";
 import { Toast, type ToastItem } from "@/components/ui/toast";
-import { createExamApiClient, resolveExamRuntimeIds } from "@/lib/exam-api";
-import { initialExams } from "../../exams/data";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamRuntimeIds } from "@/lib/exam-api";
+import type { Exam } from "../../exams/data";
+import { getExamDetail } from "../../exams/exam-api";
 import {
   calculateAnswerProgress,
   formatClock,
@@ -37,9 +38,20 @@ import {
 export default function TakeExamPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [runtime, setRuntime] = React.useState<ExamRuntimeIds | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const api = React.useMemo(() => createExamApiClient(), []);
+
+  React.useEffect(() => {
+    getExamDetail(params.id)
+      .then((item) => {
+        setExam(item);
+        setRuntime(resolveExamRuntimeIds(item.id));
+        setSecondsLeft(Math.max(Number.parseInt(item.duration, 10) || 90, 1) * 60);
+      })
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "exam_detail_load_failed"));
+  }, [params.id]);
   const [gateToken, setGateToken] = React.useState("");
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [answers, setAnswers] = React.useState<Record<string, string>>({});
@@ -51,17 +63,19 @@ export default function TakeExamPage() {
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const [violationCount, setViolationCount] = React.useState(0);
 
-  const currentQuestion = exam.questions[currentIndex] ?? exam.questions[0];
-  const answerProgress = calculateAnswerProgress(exam.questions, answers);
+  const questions = exam?.questions ?? [];
+  const currentQuestion = questions[currentIndex] ?? questions[0];
+  const answerProgress = calculateAnswerProgress(questions, answers);
   const answeredCount = answerProgress.answered;
   const progress = answerProgress.progress;
   const autosave = getAutosaveState(isOnline, syncState === "saving");
   const timeWarning = getTimeWarning(secondsLeft);
-  const submitReadiness = validateSubmitReadiness(exam.questions, answers, secondsLeft, syncState === "queued");
+  const submitReadiness = validateSubmitReadiness(questions, answers, secondsLeft, syncState === "queued");
 
   React.useEffect(() => {
+    if (!exam) return;
     setGateToken(window.sessionStorage.getItem(`exam_gate_token_${exam.id}`) ?? "");
-  }, [exam.id]);
+  }, [exam]);
 
   React.useEffect(() => {
     const interval = window.setInterval(() => {
@@ -79,7 +93,7 @@ export default function TakeExamPage() {
   }, []);
 
   React.useEffect(() => {
-    if (!currentQuestion) return;
+    if (!currentQuestion || !runtime) return;
     setSyncState(isOnline ? "saving" : "queued");
     const timeout = window.setTimeout(() => {
       if (!isOnline) {
@@ -112,6 +126,10 @@ export default function TakeExamPage() {
   }
 
   async function submitExam() {
+    if (!exam || !runtime) {
+      toast("Exam belum siap", loadError ?? "Data exam/session belum tersedia.", "error");
+      return;
+    }
     setSyncState("saving");
     try {
       const receipt = await api.submit(runtime, answers, gateToken);
@@ -123,6 +141,16 @@ export default function TakeExamPage() {
       setSyncState("queued");
       toast("Submit server gagal", "Jawaban belum mendapat receipt server. Coba lagi saat koneksi stabil.", "error");
     }
+  }
+
+  if (!exam) {
+    return (
+      <SecureExamShell title="Memuat exam" subtitle="Mengambil data ujian dari backend." mode="exam" allowUnsecure>
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {loadError ? `Gagal memuat exam: ${loadError}` : "Memuat detail exam..."}
+        </Panel>
+      </SecureExamShell>
+    );
   }
 
   return (

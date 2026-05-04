@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bayuw101/morfoschools/internal/modules/auth"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
@@ -25,11 +26,16 @@ type CreateUserParams struct {
 	Role  string `json:"role"`
 }
 
+type UpdatePasswordParams struct {
+	Password string `json:"password"`
+}
+
 type Repository interface {
 	ListUsers(ctx context.Context, tenantID string) ([]User, error)
 	CreateUser(ctx context.Context, tenantID string, params CreateUserParams) (User, error)
 	UpdateUser(ctx context.Context, tenantID string, userID string, params CreateUserParams) (User, error)
 	DeleteUser(ctx context.Context, tenantID string, userID string) error
+	UpdatePassword(ctx context.Context, tenantID string, userID string, passwordHash string) error
 }
 
 type Handler struct {
@@ -47,6 +53,10 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := extractBetween(r.URL.Path, "/api/v1/users/", "")
+	isPasswordRoute := strings.HasSuffix(id, "/password")
+	if isPasswordRoute {
+		id = strings.TrimSuffix(id, "/password")
+	}
 
 	switch r.Method {
 	case http.MethodGet:
@@ -56,6 +66,10 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPatch:
 		if id == "" {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if isPasswordRoute {
+			handler.updatePassword(w, r, tenantID, id)
 			return
 		}
 		handler.update(w, r, tenantID, id)
@@ -154,6 +168,29 @@ func (handler Handler) delete(w http.ResponseWriter, r *http.Request, tenantID s
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (handler Handler) updatePassword(w http.ResponseWriter, r *http.Request, tenantID string, userID string) {
+	var params UpdatePasswordParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	password := strings.TrimSpace(params.Password)
+	if len(password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password_too_short"})
+		return
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "password_hash_failed"})
+		return
+	}
+	if err := handler.repo.UpdatePassword(r.Context(), tenantID, userID, hash); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update_password_failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password_updated"})
 }
 
 func extractBetween(path, prefix, suffix string) string {

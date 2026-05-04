@@ -1,5 +1,6 @@
 export type StudentDomainRecord = {
   id: string;
+  userId?: string;
   nisn: string;
   name: string;
   email: string;

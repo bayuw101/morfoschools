@@ -83,11 +83,11 @@ func main() {
 		loginLimiter := auth.NewLoginRateLimiter(cacheClient, 10, 10*time.Minute)
 		mux.Handle("/api/v1/auth/", auth.NewHandlerWithRateLimiter(authRepo, loginLimiter))
 
-		tenantHandler := tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool))
+		tenantHandler := authctx.RequirePermission(authctx.ManageTenants)(tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/tenants", tenantHandler)
 		mux.Handle("/api/v1/tenants/", tenantHandler)
 
-		identityHandler := identity.NewHandler(identity.NewPostgresRepository(pgxPool))
+		identityHandler := authctx.RequirePermission(authctx.ManageUsers)(identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/users", identityHandler)
 		mux.Handle("/api/v1/users/", identityHandler)
 
@@ -95,17 +95,17 @@ func main() {
 		mux.Handle("/api/v1/students", studentHandler)
 		mux.Handle("/api/v1/students/", studentHandler)
 
-		classHandler := classes.NewHandler(classes.NewPostgresRepository(pgxPool))
+		classHandler := authctx.RequirePermission(authctx.ManageClasses)(classes.NewHandler(classes.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/classes", classHandler)
 		mux.Handle("/api/v1/classes/", classHandler)
 
-		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
+		academicHandler := authctx.RequirePermission(authctx.ManageSubjectGroups)(academic.NewHandler(academic.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/academic/subjects", academicHandler)
 		mux.Handle("/api/v1/academic/course-offerings", academicHandler)
 		mux.Handle("/api/v1/academic/teaching-assignments", academicHandler)
 		mux.Handle("/api/v1/academic/subject-groups", academicHandler)
 		mux.Handle("/api/v1/academic/subject-groups/", academicHandler)
-		courseHandler := courses.NewHandler(courses.NewPostgresRepository(pgxPool))
+		courseHandler := authctx.RequirePermission(authctx.ManageCourses)(courses.NewHandler(courses.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/courses", courseHandler)
 		mux.Handle("/api/v1/courses/", courseHandler)
 		mux.Handle("/api/v1/course-modules/", courseHandler)
@@ -125,7 +125,7 @@ func main() {
 
 	var server http.Handler
 	if dbPool != nil {
-		server = auth.SessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient))(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
+		server = auth.ProtectedSessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient), []string{"/api/v1/auth/"})(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
 	} else {
 		server = authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
 	}

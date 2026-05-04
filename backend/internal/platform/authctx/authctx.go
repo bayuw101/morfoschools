@@ -59,6 +59,23 @@ func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 	}
 }
 
+func RequirePermission(permission Permission) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user := FromContext(r.Context())
+			if user.ID == "" || user.Role == "" {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "user_required"})
+				return
+			}
+			if !Can(user.Role, permission) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "permission_forbidden"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

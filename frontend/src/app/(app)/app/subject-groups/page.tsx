@@ -13,11 +13,19 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
-import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { DirectoryTableSkeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
-import { fetchApi } from "@/lib/api-client";
+import {
+  createSubjectGroup,
+  deleteSubjectGroup,
+  listSubjectGroups,
+  listSubjectOptions,
+  updateSubjectGroup,
+  type SubjectGroupPayload,
+  type SubjectOption,
+} from "./subject-group-api";
 import {
   calculateSubjectGroupMetrics,
   filterSubjectGroups,
@@ -29,22 +37,20 @@ import {
 
 const subjectGroupSchema = z.object({
   name: z.string().min(3, "Nama rombel minimal 3 karakter"),
-  subject: z.string().min(1, "Mata pelajaran wajib dipilih"),
-  teacher: z.string().min(1, "Guru pengampu wajib dipilih"),
+  subjectId: z.string().min(1, "Mata pelajaran wajib dipilih"),
   academicYear: z.string().min(4, "Tahun ajaran wajib diisi"),
-  status: z.enum(["active", "draft"], { message: "Status wajib dipilih" }),
+  term: z.enum(["ganjil", "genap"], { message: "Semester wajib dipilih" }),
 });
 
 type SubjectGroupForm = z.infer<typeof subjectGroupSchema>;
 type Student = SubjectGroupStudentRecord;
-type SubjectGroup = SubjectGroupForm & SubjectGroupRecord;
+type SubjectGroup = SubjectGroupRecord;
 
 const emptySubjectGroup: SubjectGroupForm = {
   name: "",
-  subject: "Matematika",
-  teacher: "Guru Matematika",
+  subjectId: "",
   academicYear: "2025/2026",
-  status: "active",
+  term: "ganjil",
 };
 
 const students: Student[] = [
@@ -55,35 +61,25 @@ const students: Student[] = [
   { id: "std-005", nis: "2025005", name: "Eka Safitri", classSection: "12-C" },
 ];
 
-const initialGroups: SubjectGroup[] = [
-  { id: "sg-math-10", name: "Matematika X - Pagi", subject: "Matematika", teacher: "Guru Matematika", academicYear: "2025/2026", status: "active", studentIds: ["std-001", "std-002", "std-004"] },
-  { id: "sg-physics-olympiad", name: "Olimpiade Fisika", subject: "Fisika", teacher: "Guru Fisika", academicYear: "2025/2026", status: "active", studentIds: ["std-003", "std-005"] },
-  { id: "sg-bahasa-draft", name: "Bahasa Indonesia Remedial", subject: "Bahasa Indonesia", teacher: "Guru Bahasa", academicYear: "2025/2026", status: "draft", studentIds: [] },
+const fallbackSubjectOptions: SubjectOption[] = [];
+const termOptions = [
+  { label: "Ganjil", value: "ganjil" },
+  { label: "Genap", value: "genap" },
 ];
-
-const subjectOptions = ["Matematika", "Fisika", "Bahasa Indonesia", "Bahasa Inggris"].map((item) => ({ label: item, value: item }));
-const teacherOptions = ["Guru Matematika", "Guru Fisika", "Guru Bahasa", "Guru Inggris"].map((item) => ({ label: item, value: item }));
 const classFilterOptions = [{ label: "Semua kelas", value: "all" }, ...Array.from(new Set(students.map((item) => item.classSection))).map((item) => ({ label: item, value: item }))];
 
 export default function SubjectGroupsPage() {
   const [groups, setGroups] = React.useState<SubjectGroup[]>([]);
+  const [subjectOptions, setSubjectOptions] = React.useState<SubjectOption[]>(fallbackSubjectOptions);
   const [loadingGroups, setLoadingGroups] = React.useState(true);
-  
+
   React.useEffect(() => {
-    fetchApi<{ data: any[] }>("/api/v1/academic/subject-groups")
-      .then(res => {
-        const mapped: SubjectGroup[] = (res.data || []).map((sg: any) => ({
-          id: sg.id,
-          name: sg.name,
-          subject: sg.subjectName || "Subject " + sg.subjectId,
-          teacher: "Assigned Teacher", // requires teaching assignment join
-          academicYear: sg.academicYear,
-          status: sg.status,
-          studentIds: Array.from({ length: sg.memberCount }).map((_, i) => "std-" + i)
-        }));
-        setGroups(mapped);
+    Promise.all([listSubjectGroups(), listSubjectOptions()])
+      .then(([items, options]) => {
+        setGroups(items);
+        setSubjectOptions(options);
       })
-      .catch(console.error)
+      .catch((error) => toast("Gagal memuat subject groups", (error as Error).message, "warning"))
       .finally(() => setLoadingGroups(false));
   }, []);
 
@@ -95,7 +91,11 @@ export default function SubjectGroupsPage() {
   const [query, setQuery] = React.useState("");
   const [classFilter, setClassFilter] = React.useState("all");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<SubjectGroupForm>({ resolver: zodResolver(subjectGroupSchema), defaultValues: emptySubjectGroup });
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm<SubjectGroupForm>({ resolver: zodResolver(subjectGroupSchema), defaultValues: emptySubjectGroup });
+
+  const subjectIdValue = watch("subjectId");
+  const termValue = watch("term");
+  const subjectNameById = React.useMemo(() => new Map(subjectOptions.map((subject) => [subject.value, subject.label])), [subjectOptions]);
 
   function toast(title: string, description: string, tone: ToastItem["tone"] = "success") {
     setToasts((current) => [...current, { id: crypto.randomUUID(), title, description, tone }]);
@@ -103,13 +103,13 @@ export default function SubjectGroupsPage() {
 
   function openCreate() {
     setEditingGroup(null);
-    reset(emptySubjectGroup);
+    reset({ ...emptySubjectGroup, subjectId: subjectOptions[0]?.value ?? "" });
     setSheetOpen(true);
   }
 
   function openEdit(group: SubjectGroup) {
     setEditingGroup(group);
-    reset({ name: group.name, subject: group.subject, teacher: group.teacher, academicYear: group.academicYear, status: group.status });
+    reset({ name: group.name, subjectId: group.subjectId, academicYear: group.academicYear, term: group.term === "genap" ? "genap" : "ganjil" });
     setSheetOpen(true);
   }
 
@@ -121,30 +121,44 @@ export default function SubjectGroupsPage() {
   }
 
   async function onSubmit(values: SubjectGroupForm) {
-    await new Promise((resolve) => setTimeout(resolve, 280));
     if (hasDuplicateSubjectGroup(groups, { name: values.name, academicYear: values.academicYear, ignoreId: editingGroup?.id })) {
       toast("Subject group duplikat", `${values.name} sudah ada di tahun ajaran ${values.academicYear}.`, "warning");
       return;
     }
-    if (editingGroup) {
-      setGroups((current) => current.map((item) => item.id === editingGroup.id ? { ...item, ...values } : item));
-      toast("Subject group diperbarui", `${values.name} berhasil disimpan.`);
-    } else {
-      setGroups((current) => [{ id: `sg-${Date.now()}`, studentIds: [], ...values }, ...current]);
-      toast("Subject group dibuat", `${values.name} siap menerima siswa lintas kelas.`);
+
+    const payload: SubjectGroupPayload = {
+      subjectId: values.subjectId,
+      name: values.name,
+      academicYear: values.academicYear,
+      term: values.term,
+    };
+
+    try {
+      if (editingGroup) {
+        const updated = await updateSubjectGroup(editingGroup.id, payload);
+        setGroups((current) => current.map((item) => item.id === editingGroup.id ? { ...updated, studentIds: item.studentIds } : item));
+        toast("Subject group diperbarui", `${values.name} berhasil disimpan.`);
+      } else {
+        const created = await createSubjectGroup(payload);
+        setGroups((current) => [{ ...created, subject: subjectNameById.get(created.subjectId) ?? created.subject, studentIds: [] }, ...current]);
+        toast("Subject group dibuat", `${values.name} siap menerima siswa lintas kelas.`);
+      }
+      setSheetOpen(false);
+    } catch (error) {
+      toast("Subject group gagal disimpan", (error as Error).message, "warning");
     }
-    setSheetOpen(false);
   }
 
-  function deleteGroup() {
+  async function deleteGroup() {
     if (!confirmGroup) return;
-    fetchApi(`/api/v1/academic/subject-groups/${confirmGroup.id}`, { method: "DELETE" })
-      .then(() => {
-        setGroups((current) => current.filter((group) => group.id !== confirmGroup.id));
-        toast("Subject group dihapus", `${confirmGroup.name} berhasil dihapus.`);
-        setConfirmGroup(null);
-      })
-      .catch((error) => toast("Delete gagal", (error as Error).message, "warning"));
+    try {
+      await deleteSubjectGroup(confirmGroup.id);
+      setGroups((current) => current.filter((group) => group.id !== confirmGroup.id));
+      toast("Subject group dihapus", `${confirmGroup.name} berhasil dihapus.`);
+      setConfirmGroup(null);
+    } catch (error) {
+      toast("Delete gagal", (error as Error).message, "warning");
+    }
   }
 
   function toggleStudent(studentId: string) {
@@ -205,7 +219,11 @@ export default function SubjectGroupsPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingGroups ? (
-            <TableSkeleton rows={4} columns={3} />
+            <DirectoryTableSkeleton
+              rows={4}
+              kind="groups"
+              className="md:grid-cols-[1.1fr_0.8fr_0.9fr_0.5fr_auto]"
+            />
           ) : filteredGroups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada subject group untuk tenant ini.
@@ -233,10 +251,9 @@ export default function SubjectGroupsPage() {
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <InputGroup title="Subject Group Profile" description="Identitas rombel akademik dan guru pengampu.">
             <InputGroupItem span="full"><FloatingInput label="Nama Subject Group" prefix={<Layers3 className="h-4 w-4" />} placeholder="Matematika X - Pagi" {...register("name")} error={errors.name?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Mata Pelajaran" startAdornment={<BookOpen className="h-4 w-4" />} options={subjectOptions} {...register("subject")} error={errors.subject?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Guru Pengampu" startAdornment={<GraduationCap className="h-4 w-4" />} options={teacherOptions} {...register("teacher")} error={errors.teacher?.message} /></InputGroupItem>
+            <InputGroupItem span="half"><FloatingSelect label="Mata Pelajaran" startAdornment={<BookOpen className="h-4 w-4" />} options={subjectOptions} {...register("subjectId")} value={subjectIdValue} onChange={(event) => setValue("subjectId", event.target.value, { shouldDirty: true, shouldValidate: true })} error={errors.subjectId?.message} disabled={!subjectOptions.length} /></InputGroupItem>
+            <InputGroupItem span="half"><FloatingSelect label="Semester" startAdornment={<GraduationCap className="h-4 w-4" />} options={termOptions} {...register("term")} value={termValue} onChange={(event) => setValue("term", event.target.value as SubjectGroupForm["term"], { shouldDirty: true, shouldValidate: true })} error={errors.term?.message} /></InputGroupItem>
             <InputGroupItem span="half"><FloatingInput label="Tahun Ajaran" placeholder="2025/2026" {...register("academicYear")} error={errors.academicYear?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Status" options={[{ label: "Active", value: "active" }, { label: "Draft", value: "draft" }]} {...register("status")} error={errors.status?.message} /></InputGroupItem>
           </InputGroup>
         </form>
       </RightPullSheet>

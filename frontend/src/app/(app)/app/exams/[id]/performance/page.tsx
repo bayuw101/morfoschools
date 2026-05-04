@@ -23,7 +23,8 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { initialExams } from "../../data";
+import type { Exam } from "../../data";
+import { getExamDetail } from "../../exam-api";
 
 type Scenario = {
   id: string;
@@ -70,8 +71,15 @@ const bottlenecks = [
 
 export default function ExamPerformancePage() {
   const params = useParams<{ id: string }>();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [loadError, setLoadError] = React.useState("");
   const [selectedScenario, setSelectedScenario] = React.useState(scenarios[0]);
+
+  React.useEffect(() => {
+    getExamDetail(params.id)
+      .then(setExam)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "exam_detail_load_failed"));
+  }, [params.id]);
   const [running, setRunning] = React.useState(false);
   const [progress, setProgress] = React.useState(68);
 
@@ -98,6 +106,16 @@ export default function ExamPerformancePage() {
   const queuePeak = selectedScenario.students >= 1000 ? 287 : 72;
   const dbCpu = selectedScenario.students >= 1000 ? 62 : 34;
   const workerLag = selectedScenario.id === "offline-replay" ? 4.8 : selectedScenario.students >= 1000 ? 3.1 : 1.2;
+
+  if (!exam) {
+    return (
+      <div className="space-y-8 pb-12">
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {loadError ? `Gagal memuat performance: ${loadError}` : "Memuat detail exam dari backend..."}
+        </Panel>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-12">

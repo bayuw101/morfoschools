@@ -225,26 +225,76 @@ func (h Handler) me(w http.ResponseWriter, r *http.Request) {
 
 // ── session middleware ──
 
-// SessionMiddleware checks for Authorization: Bearer <token> and injects
+// SessionMiddleware checks for Authorization: Bearer *** and injects
 // X-User-ID, X-User-Role, X-Tenant-ID headers into the request so
 // downstream middleware (authctx, tenantctx) works transparently.
-// Falls back to existing dev headers when no bearer token is present.
+// It always strips caller-supplied identity/tenant headers first.
 func SessionMiddleware(repo Repository) func(http.Handler) http.Handler {
+	return sessionMiddleware(repo, false)
+}
+
+// StrictSessionMiddleware requires a valid bearer session and never trusts
+// caller-supplied identity/tenant headers. Use this for protected API routes.
+func StrictSessionMiddleware(repo Repository) func(http.Handler) http.Handler {
+	return sessionMiddleware(repo, true)
+}
+
+// ProtectedSessionMiddleware allows public path prefixes (login/logout) without
+// a token while requiring a valid session for every other API path.
+func ProtectedSessionMiddleware(repo Repository, publicPrefixes []string) func(http.Handler) http.Handler {
+	strict := StrictSessionMiddleware(repo)
+	passthrough := sessionMiddleware(repo, false)
+	return func(next http.Handler) http.Handler {
+		strictHandler := strict(next)
+		passthroughHandler := passthrough(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for _, prefix := range publicPrefixes {
+				if strings.HasPrefix(r.URL.Path, prefix) {
+					passthroughHandler.ServeHTTP(w, r)
+					return
+				}
+			}
+			strictHandler.ServeHTTP(w, r)
+		})
+	}
+}
+
+func sessionMiddleware(repo Repository, strict bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			stripSessionHeaders(r)
 			token := extractBearerToken(r)
-			if token != "" {
-				sess, err := repo.FindSessionByToken(r.Context(), token)
-				if err == nil && sess != nil && time.Now().Before(sess.ExpiresAt) {
-					r.Header.Set("X-User-ID", sess.UserID)
-					r.Header.Set("X-User-Role", sess.Role)
-					r.Header.Set("X-Tenant-ID", sess.TenantID)
+			if token == "" {
+				if strict {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "token_required"})
+					return
 				}
-				// If token is invalid/expired, fall through to dev headers
+				next.ServeHTTP(w, r)
+				return
 			}
+
+			sess, err := repo.FindSessionByToken(r.Context(), token)
+			if err != nil || sess == nil || time.Now().After(sess.ExpiresAt) {
+				if strict {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "session_invalid"})
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			r.Header.Set("X-User-ID", sess.UserID)
+			r.Header.Set("X-User-Role", sess.Role)
+			r.Header.Set("X-Tenant-ID", sess.TenantID)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func stripSessionHeaders(r *http.Request) {
+	r.Header.Del("X-User-ID")
+	r.Header.Del("X-User-Role")
+	r.Header.Del("X-Tenant-ID")
 }
 
 // ── helpers ──

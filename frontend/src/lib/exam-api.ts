@@ -114,31 +114,29 @@ export type ManualGradeResult = ManualGradeInput & {
   gradedAt?: string;
 };
 
-const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
-const DEMO_STUDENT_ID = "00000000-0000-4000-8000-000000000301";
-const DEMO_EXAM_ID = "00000000-0000-4000-8000-000000000801";
-const DEMO_ATTEMPT_ID = "00000000-0000-4000-8000-000000000901";
-
-const demoRuntimeByLocalExamId: Record<string, ExamRuntimeIds> = {
-  "exam-mid-math-x": {
-    tenantId: DEMO_TENANT_ID,
-    examId: DEMO_EXAM_ID,
-    attemptId: DEMO_ATTEMPT_ID,
-    studentId: DEMO_STUDENT_ID,
-  },
-};
-
 export function resolveExamRuntimeIds(
-  localExamId: string,
+  examId: string,
   overrides: Partial<ExamRuntimeIds> = {},
 ): ExamRuntimeIds {
-  const fallback: ExamRuntimeIds = {
-    tenantId: DEMO_TENANT_ID,
-    examId: localExamId,
-    attemptId: `${localExamId}-attempt`,
-    studentId: DEMO_STUDENT_ID,
+  const session = getSession();
+  const tenantId = overrides.tenantId ?? session?.tenantId;
+  const studentId = overrides.studentId ?? session?.userId;
+  const resolvedExamId = overrides.examId ?? examId;
+  const attemptId = overrides.attemptId ?? `${resolvedExamId}:${studentId ?? "unknown-student"}:attempt`;
+
+  if (!tenantId) {
+    throw new Error("exam_runtime_missing_tenant_session");
+  }
+  if (!studentId) {
+    throw new Error("exam_runtime_missing_student_session");
+  }
+
+  return {
+    tenantId,
+    examId: resolvedExamId,
+    attemptId,
+    studentId,
   };
-  return { ...(demoRuntimeByLocalExamId[localExamId] ?? fallback), ...overrides };
 }
 
 export function buildExamApiHeaders(identity: ExamApiIdentity): Record<string, string> {

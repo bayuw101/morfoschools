@@ -48,10 +48,11 @@ export function UserButton() {
         {isLoadingSession ? (
           <>
             <Skeleton className="h-8 w-8 rounded-full" />
-            <div className="hidden space-y-1.5 text-left sm:block">
-              <Skeleton className="h-3 w-24 rounded-full" />
-              <Skeleton className="h-2.5 w-16 rounded-full" />
+            <div className="hidden space-y-1 text-left sm:block">
+              <Skeleton className="h-4 w-24 rounded-full" />
+              <Skeleton className="h-[14px] w-16 rounded-full" />
             </div>
+            <Skeleton className="h-4 w-4 rounded-full" />
           </>
         ) : (
           <>

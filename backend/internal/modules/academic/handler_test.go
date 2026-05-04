@@ -36,7 +36,8 @@ func (repo *fakeAcademicRepository) DeleteSubject(ctx context.Context, tenantID 
 }
 func (repo *fakeAcademicRepository) UpdateSubjectGroup(ctx context.Context, tenantID string, id string, params CreateSubjectGroupParams) (SubjectGroup, error) {
 	repo.capturedTenant = tenantID
-	return SubjectGroup{ID: id, Name: params.Name, AcademicYear: params.AcademicYear, Term: params.Term, Status: "active"}, repo.err
+	repo.capturedGroup = params
+	return SubjectGroup{ID: id, SubjectID: params.SubjectID, Name: params.Name, AcademicYear: params.AcademicYear, Term: params.Term, Status: "active"}, repo.err
 }
 func (repo *fakeAcademicRepository) DeleteSubjectGroup(ctx context.Context, tenantID string, id string) error {
 	repo.capturedTenant = tenantID
@@ -302,6 +303,44 @@ func TestCreateSubjectGroupRejectsInvalidTerm(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateSubjectGroupCapturesIDAndTenant(t *testing.T) {
+	repo := &fakeAcademicRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	body := `{"subjectId":"subject-2","name":" Fisika Olimpiade ","academicYear":"2026/2027","term":" Genap "}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/academic/subject-groups/group-1", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" {
+		t.Fatalf("expected tenant-1 update, got %q", repo.capturedTenant)
+	}
+	if repo.capturedGroup.SubjectID != "subject-2" || repo.capturedGroup.Name != "Fisika Olimpiade" || repo.capturedGroup.Term != "genap" {
+		t.Fatalf("unexpected update params: %+v", repo.capturedGroup)
+	}
+}
+
+func TestDeleteSubjectGroupCapturesIDAndTenant(t *testing.T) {
+	repo := &fakeAcademicRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/academic/subject-groups/group-1", nil)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" {
+		t.Fatalf("expected tenant-1 delete, got %q", repo.capturedTenant)
 	}
 }
 

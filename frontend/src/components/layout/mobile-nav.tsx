@@ -6,16 +6,22 @@ import { usePathname } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { primaryNavigation } from "@/config/navigation";
 import { cn } from "@/lib/cn";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/rbac";
 
 export function MobileNav() {
   const pathname = usePathname();
   const [pendingRoute, setPendingRoute] = React.useState<string | null>(null);
+  const [role, setRole] = React.useState<string | null>(null);
 
   React.useEffect(() => setPendingRoute(null), [pathname]);
+  React.useEffect(() => setRole(getSession()?.role ?? null), []);
+
+  const visibleNavigation = primaryNavigation.filter((item) => hasPermission(role, item.permission)).slice(0, 5);
 
   return (
     <nav className="fixed inset-x-4 bottom-4 z-40 flex items-center justify-between rounded-[24px] border border-[color:var(--border-strong)] bg-[color:var(--surface)] px-2 py-2 shadow-[0_18px_40px_rgba(17,32,51,0.18)] backdrop-blur-xl md:hidden">
-      {primaryNavigation.slice(0, 5).map((item) => {
+      {visibleNavigation.map((item) => {
         const Icon = item.icon;
         const isActive = item.href === "/app" ? pathname === item.href : pathname.startsWith(item.href);
         const isPending = pendingRoute === item.href;

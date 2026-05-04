@@ -24,8 +24,10 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { createExamApiClient, resolveExamRuntimeIds, type ExamMonitorReadModel } from "@/lib/exam-api";
-import { initialExams } from "../../data";
+import { getSession } from "@/lib/auth";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamMonitorReadModel, type ExamRuntimeIds } from "@/lib/exam-api";
+import type { Exam } from "../../data";
+import { getExamDetail } from "../../exam-api";
 
 // Simulated live data types
 type StudentStatus = "online" | "offline" | "submitted" | "violation";
@@ -39,11 +41,21 @@ type FeedEvent = {
 
 export default function ExamMonitorDashboard() {
   const params = useParams<{ id: string }>();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [runtime, setRuntime] = React.useState<ExamRuntimeIds | null>(null);
   const api = React.useMemo(() => createExamApiClient(), []);
   const [serverMonitor, setServerMonitor] = React.useState<ExamMonitorReadModel | null>(null);
   const [serverError, setServerError] = React.useState("");
+
+  React.useEffect(() => {
+    getExamDetail(params.id)
+      .then((item) => {
+        setExam(item);
+        const session = getSession();
+        setRuntime(resolveExamRuntimeIds(item.id, { tenantId: session?.tenantId, studentId: session?.userId }));
+      })
+      .catch((error) => setServerError(error instanceof Error ? error.message : "exam_detail_load_failed"));
+  }, [params.id]);
 
   // Simulation state
   const [activeStudents, setActiveStudents] = React.useState(142);
@@ -58,8 +70,14 @@ export default function ExamMonitorDashboard() {
   ]);
 
   React.useEffect(() => {
+    if (!runtime) return;
+    const teacherId = getSession()?.userId;
+    if (!teacherId) {
+      setServerError("teacher_session_missing");
+      return;
+    }
     api
-      .getMonitor(runtime, "00000000-0000-4000-8000-000000000201")
+      .getMonitor(runtime, teacherId)
       .then((monitor) => {
         setServerMonitor(monitor);
         setServerError("");
@@ -138,6 +156,16 @@ export default function ExamMonitorDashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  if (!exam) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {serverError ? `Gagal memuat monitor: ${serverError}` : "Memuat detail exam dan monitor backend..."}
+        </Panel>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

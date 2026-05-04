@@ -30,19 +30,33 @@ describe("exam backend api client", () => {
     });
   });
 
-  it("maps local demo exam ids to backend deterministic ids", () => {
-    expect(resolveExamRuntimeIds("exam-mid-math-x")).toEqual({
-      examId: "00000000-0000-4000-8000-000000000801",
-      attemptId: "00000000-0000-4000-8000-000000000901",
-      studentId: "00000000-0000-4000-8000-000000000301",
-      tenantId: "00000000-0000-4000-8000-000000000001",
+  it("resolves runtime ids from live session/overrides and refuses demo tenant fallbacks", () => {
+    expect(() => resolveExamRuntimeIds("exam-1")).toThrow("exam_runtime_missing_tenant_session");
+
+    expect(
+      resolveExamRuntimeIds("exam-1", {
+        tenantId: "tenant-1",
+        studentId: "student-1",
+      }),
+    ).toEqual({
+      examId: "exam-1",
+      attemptId: "exam-1:student-1:attempt",
+      studentId: "student-1",
+      tenantId: "tenant-1",
     });
 
-    expect(resolveExamRuntimeIds("custom-exam", { studentId: "student-a" })).toEqual({
-      examId: "custom-exam",
-      attemptId: "custom-exam-attempt",
+    expect(
+      resolveExamRuntimeIds("local-route-id", {
+        examId: "backend-exam-1",
+        attemptId: "attempt-1",
+        studentId: "student-a",
+        tenantId: "tenant-a",
+      }),
+    ).toEqual({
+      examId: "backend-exam-1",
+      attemptId: "attempt-1",
       studentId: "student-a",
-      tenantId: "00000000-0000-4000-8000-000000000001",
+      tenantId: "tenant-a",
     });
   });
 
@@ -66,7 +80,12 @@ describe("exam backend api client", () => {
       return new Response(JSON.stringify({ attemptId: "attempt-1", status: "completed", finalScore: 27 }), { status: 200 });
     });
     const client = createExamApiClient({ baseUrl: "http://localhost:8080", fetcher: fetchMock });
-    const runtime = resolveExamRuntimeIds("exam-mid-math-x");
+    const runtime = resolveExamRuntimeIds("exam-mid-math-x", {
+      examId: "00000000-0000-4000-8000-000000000801",
+      attemptId: "00000000-0000-4000-8000-000000000901",
+      studentId: "00000000-0000-4000-8000-000000000301",
+      tenantId: "00000000-0000-4000-8000-000000000001",
+    });
 
     await expect(client.getMonitor(runtime, "teacher-1")).resolves.toMatchObject({ examId: "exam-1" });
     await expect(client.listManualGrading(runtime, "teacher-1")).resolves.toMatchObject({ items: [{ attemptId: "attempt-1" }] });
@@ -98,7 +117,12 @@ describe("exam backend api client", () => {
     });
 
     const client = createExamApiClient({ baseUrl: "http://localhost:8080", fetcher: fetchMock });
-    const runtime = resolveExamRuntimeIds("exam-mid-math-x");
+    const runtime = resolveExamRuntimeIds("exam-mid-math-x", {
+      examId: "00000000-0000-4000-8000-000000000801",
+      attemptId: "00000000-0000-4000-8000-000000000901",
+      studentId: "00000000-0000-4000-8000-000000000301",
+      tenantId: "00000000-0000-4000-8000-000000000001",
+    });
 
     await expect(client.checkGate(runtime, "MATH-UTS")).resolves.toMatchObject({ allowed: true });
     await expect(client.autosave(runtime, { "q-1": "B" }, "gate-token")).resolves.toMatchObject({ receiptId: "autosave-rct" });

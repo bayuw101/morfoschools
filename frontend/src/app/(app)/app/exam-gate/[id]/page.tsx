@@ -24,7 +24,8 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { createExamApiClient, resolveExamRuntimeIds } from "@/lib/exam-api";
-import { initialExams } from "../../exams/data";
+import type { Exam } from "../../exams/data";
+import { getExamDetail } from "../../exams/exam-api";
 import {
   formatGateDateTime,
   getGateEligibilityState,
@@ -35,10 +36,25 @@ import {
 export default function ExamGatePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const gate = exam.gateRules[0];
-  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const gate = exam?.gateRules[0];
+  const runtime = React.useMemo(() => {
+    if (!exam) return null;
+    try {
+      return resolveExamRuntimeIds(exam.id);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "exam_runtime_missing_session");
+      return null;
+    }
+  }, [exam]);
   const api = React.useMemo(() => createExamApiClient(), []);
+
+  React.useEffect(() => {
+    getExamDetail(params.id)
+      .then(setExam)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : "exam_detail_load_failed"));
+  }, [params.id]);
   const [password, setPassword] = React.useState("");
   const [acceptedRules, setAcceptedRules] = React.useState(false);
   const [serverChecking, setServerChecking] = React.useState(false);
@@ -61,6 +77,10 @@ export default function ExamGatePage() {
   }
 
   async function enterExam() {
+    if (!exam || !runtime) {
+      toast("Session belum siap", loadError ?? "Exam/session belum berhasil dimuat.", "error");
+      return;
+    }
     if (!acceptedRules) {
       toast("Rules belum disetujui", "Centang persetujuan rules sebelum masuk exam.", "warning");
       return;
@@ -89,6 +109,16 @@ export default function ExamGatePage() {
     } finally {
       setServerChecking(false);
     }
+  }
+
+  if (!exam) {
+    return (
+      <SecureExamShell title="Memuat exam" subtitle="Mengambil data ujian dari backend." mode="gate" allowUnsecure>
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {loadError ? `Gagal memuat exam: ${loadError}` : "Memuat detail exam..."}
+        </Panel>
+      </SecureExamShell>
+    );
   }
 
   return (

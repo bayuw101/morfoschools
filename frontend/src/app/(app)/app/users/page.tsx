@@ -7,6 +7,7 @@ import * as z from "zod";
 import {
   Edit3,
   GraduationCap,
+  KeyRound,
   Mail,
   Plus,
   School,
@@ -27,6 +28,7 @@ import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { DirectoryTableSkeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { fetchApi } from "@/lib/api-client";
+import { canSubmitPasswordChange, normalizePasswordPayload, type PasswordFormValues } from "./password-domain";
 import { getSession } from "@/lib/auth";
 import {
   calculateUserMetrics,
@@ -168,6 +170,9 @@ export default function UsersPage() {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingUser, setEditingUser] = React.useState<User | null>(null);
   const [confirmUser, setConfirmUser] = React.useState<User | null>(null);
+  const [passwordUser, setPasswordUser] = React.useState<User | null>(null);
+  const [passwordValues, setPasswordValues] = React.useState<PasswordFormValues>({ password: "", confirmPassword: "" });
+  const [savingPassword, setSavingPassword] = React.useState(false);
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const {
     register,
@@ -244,6 +249,30 @@ export default function UsersPage() {
       setSheetOpen(false);
     } catch (error) {
       toast("Request failed", (error as Error).message, "warning");
+    }
+  }
+
+  function openPassword(user: User) {
+    setPasswordUser(user);
+    setPasswordValues({ password: "", confirmPassword: "" });
+  }
+
+  async function updatePassword() {
+    if (!passwordUser || !canSubmitPasswordChange(passwordValues)) return;
+    setSavingPassword(true);
+    try {
+      await fetchApi(`/api/v1/users/${passwordUser.id}/password`, {
+        method: "PATCH",
+        headers: { "X-Tenant-ID": passwordUser.tenantId },
+        body: JSON.stringify(normalizePasswordPayload(passwordValues)),
+      });
+      setUsers((current) => current.map((item) => item.id === passwordUser.id ? { ...item, status: item.status === "invited" ? "active" : item.status } : item));
+      toast("Password updated", `${passwordUser.name} sekarang bisa login dengan password baru.`);
+      setPasswordUser(null);
+    } catch (error) {
+      toast("Gagal update password", (error as Error).message, "warning");
+    } finally {
+      setSavingPassword(false);
     }
   }
 
@@ -330,7 +359,7 @@ export default function UsersPage() {
             <DirectoryTableSkeleton
               rows={4}
               kind="users"
-              className="md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto]"
+              className="md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto_auto]"
             />
           ) : filteredUsers.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
@@ -339,7 +368,7 @@ export default function UsersPage() {
           ) : filteredUsers.map((user) => (
             <div
               key={user.id}
-              className="grid gap-4 px-5 py-4 md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto] md:items-center"
+              className="grid gap-4 px-5 py-4 md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto_auto] md:items-center"
             >
               <div>
                 <p className="font-semibold text-[color:var(--foreground)]">
@@ -362,6 +391,13 @@ export default function UsersPage() {
                 onClick={() => openEdit(user)}
               >
                 <Edit3 className="h-4 w-4" /> Edit
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openPassword(user)}
+              >
+                <KeyRound className="h-4 w-4" /> Password
               </Button>
               <Button
                 variant="secondary"
@@ -445,6 +481,47 @@ export default function UsersPage() {
             </InputGroupItem>
           </InputGroup>
         </form>
+      </RightPullSheet>
+
+      <RightPullSheet
+        open={passwordUser !== null}
+        onOpenChange={(open) => !open && setPasswordUser(null)}
+        eyebrow="Set password"
+        title={passwordUser ? `Update password ${passwordUser.name}` : "Update password"}
+        description="Password disimpan sebagai bcrypt hash di backend dan tidak pernah dikirim balik ke frontend."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPasswordUser(null)}>
+              Cancel
+            </Button>
+            <Button onClick={updatePassword} disabled={savingPassword || !canSubmitPasswordChange(passwordValues)}>
+              {savingPassword ? "Saving..." : "Save Password"}
+            </Button>
+          </>
+        }
+      >
+        <InputGroup title="Login Credential" description="Gunakan minimal 8 karakter. Konfirmasi harus sama.">
+          <InputGroupItem span="full">
+            <FloatingInput
+              label="Password baru"
+              type="password"
+              prefix={<KeyRound className="h-4 w-4" />}
+              value={passwordValues.password}
+              onChange={(event) => setPasswordValues((current) => ({ ...current, password: event.target.value }))}
+              error={passwordValues.password && passwordValues.password.trim().length < 8 ? "Password minimal 8 karakter" : undefined}
+            />
+          </InputGroupItem>
+          <InputGroupItem span="full">
+            <FloatingInput
+              label="Konfirmasi password"
+              type="password"
+              prefix={<KeyRound className="h-4 w-4" />}
+              value={passwordValues.confirmPassword}
+              onChange={(event) => setPasswordValues((current) => ({ ...current, confirmPassword: event.target.value }))}
+              error={passwordValues.confirmPassword && passwordValues.password.trim() !== passwordValues.confirmPassword.trim() ? "Konfirmasi password belum sama" : undefined}
+            />
+          </InputGroupItem>
+        </InputGroup>
       </RightPullSheet>
 
       <ConfirmDialog

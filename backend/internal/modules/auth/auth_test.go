@@ -224,7 +224,7 @@ func TestSessionMiddlewarePassesWithValidToken(t *testing.T) {
 	}
 }
 
-func TestSessionMiddlewareFallsBackToDevHeaders(t *testing.T) {
+func TestSessionMiddlewareStripsForgedDevHeaders(t *testing.T) {
 	repo := &fakeAuthRepository{session: nil}
 	var capturedUser string
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -233,8 +233,8 @@ func TestSessionMiddlewareFallsBackToDevHeaders(t *testing.T) {
 	})
 	handler := SessionMiddleware(repo)(inner)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-User-ID", "dev-user")
-	req.Header.Set("X-User-Role", "admin")
+	req.Header.Set("X-User-ID", "forged-user")
+	req.Header.Set("X-User-Role", "owner")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -242,8 +242,8 @@ func TestSessionMiddlewareFallsBackToDevHeaders(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("expected 204, got %d body=%s", rec.Code, rec.Body.String())
 	}
-	if capturedUser != "dev-user" {
-		t.Fatalf("expected dev-user fallback, got %q", capturedUser)
+	if capturedUser != "" {
+		t.Fatalf("expected forged user header stripped, got %q", capturedUser)
 	}
 }
 

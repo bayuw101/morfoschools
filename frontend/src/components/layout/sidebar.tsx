@@ -7,13 +7,19 @@ import { Loader2 } from "lucide-react";
 import { appRoutes } from "@/config/routes";
 import { primaryNavigation } from "@/config/navigation";
 import { cn } from "@/lib/cn";
+import { getSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/rbac";
 import { LogoLockup } from "@/components/ui/logo-lockup";
 
 export function Sidebar() {
   const pathname = usePathname();
   const [pendingRoute, setPendingRoute] = React.useState<string | null>(null);
+  const [role, setRole] = React.useState<string | null>(null);
 
   React.useEffect(() => setPendingRoute(null), [pathname]);
+  React.useEffect(() => setRole(getSession()?.role ?? null), []);
+
+  const visibleNavigation = primaryNavigation.filter((item) => hasPermission(role, item.permission));
 
   return (
     <aside className="ml-1 fixed inset-y-0 left-0 z-40 hidden w-[66px] flex-col items-center bg-[color:var(--shell)] px-3 py-4 md:flex">
@@ -26,7 +32,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="flex flex-1 flex-col items-center gap-1.5">
-        {primaryNavigation.map((item) => {
+        {visibleNavigation.map((item) => {
           const isActive =
             item.href === appRoutes.appHome
               ? pathname === item.href

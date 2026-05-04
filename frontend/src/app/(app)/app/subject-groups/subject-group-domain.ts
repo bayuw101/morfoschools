@@ -10,9 +10,11 @@ export type SubjectGroupStudentRecord = {
 export type SubjectGroupRecord = {
   id: string;
   name: string;
+  subjectId: string;
   subject: string;
   teacher: string;
   academicYear: string;
+  term: string;
   status: SubjectGroupStatus;
   studentIds: string[];
 };

@@ -72,3 +72,35 @@ func TestRequireRolesRejectsWrongRole(t *testing.T) {
 		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestRequirePermissionAllowsAuthorizedRole(t *testing.T) {
+	handler := Middleware(RequirePermission(ManageClasses)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(UserIDHeader, "user-1")
+	req.Header.Set(UserRoleHeader, "admin")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRequirePermissionRejectsUnauthorizedRole(t *testing.T) {
+	handler := Middleware(RequirePermission(ManageUsers)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(UserIDHeader, "user-1")
+	req.Header.Set(UserRoleHeader, "teacher")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}

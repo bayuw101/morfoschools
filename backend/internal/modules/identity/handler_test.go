@@ -12,10 +12,12 @@ import (
 )
 
 type fakeUserRepository struct {
-	users          []User
-	capturedTenant string
-	capturedParams CreateUserParams
-	err            error
+	users            []User
+	capturedTenant   string
+	capturedUserID   string
+	capturedParams   CreateUserParams
+	capturedPassword string
+	err              error
 }
 
 func (repo *fakeUserRepository) ListUsers(ctx context.Context, tenantID string) ([]User, error) {
@@ -43,6 +45,16 @@ func (repo *fakeUserRepository) UpdateUser(ctx context.Context, tenantID string,
 
 func (repo *fakeUserRepository) DeleteUser(ctx context.Context, tenantID string, userID string) error {
 	repo.capturedTenant = tenantID
+	if repo.err != nil {
+		return repo.err
+	}
+	return nil
+}
+
+func (repo *fakeUserRepository) UpdatePassword(ctx context.Context, tenantID string, userID string, passwordHash string) error {
+	repo.capturedTenant = tenantID
+	repo.capturedUserID = userID
+	repo.capturedPassword = passwordHash
 	if repo.err != nil {
 		return repo.err
 	}
@@ -158,5 +170,39 @@ func TestDeleteUserRemovesTenantMembership(t *testing.T) {
 	}
 	if repo.capturedTenant != "tenant-1" {
 		t.Fatalf("expected tenant-1 delete, got %q", repo.capturedTenant)
+	}
+}
+
+func TestUpdatePasswordHashesTenantScopedUserPassword(t *testing.T) {
+	repo := &fakeUserRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/users/user-1/password", bytes.NewBufferString(`{"password":"password123"}`))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" || repo.capturedUserID != "user-1" {
+		t.Fatalf("unexpected tenant/user capture: tenant=%q user=%q", repo.capturedTenant, repo.capturedUserID)
+	}
+	if repo.capturedPassword == "" || repo.capturedPassword == "password123" {
+		t.Fatalf("expected hashed password, got %q", repo.capturedPassword)
+	}
+}
+
+func TestUpdatePasswordRejectsShortPassword(t *testing.T) {
+	repo := &fakeUserRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/users/user-1/password", bytes.NewBufferString(`{"password":"short"}`))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

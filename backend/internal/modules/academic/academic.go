@@ -238,8 +238,18 @@ func (handler Handler) handleTeachingAssignments(w http.ResponseWriter, r *http.
 }
 
 func (handler Handler) handleSubjectGroups(w http.ResponseWriter, r *http.Request, tenantID string) {
+	path := strings.TrimSuffix(r.URL.Path, "/")
+	id := ""
+	if strings.HasPrefix(path, "/api/v1/academic/subject-groups/") {
+		id = strings.TrimSpace(strings.TrimPrefix(path, "/api/v1/academic/subject-groups/"))
+	}
+
 	switch r.Method {
 	case http.MethodGet:
+		if id != "" {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+			return
+		}
 		items, err := handler.repo.ListSubjectGroups(r.Context(), tenantID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list_subject_groups_failed"})
@@ -247,15 +257,12 @@ func (handler Handler) handleSubjectGroups(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, map[string][]SubjectGroup{"data": items})
 	case http.MethodPost:
-
-		var params CreateSubjectGroupParams
-		if err := decodeJSON(r, &params); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		if id != "" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 			return
 		}
-		params = normalizeSubjectGroup(params)
-		if err := validateSubjectGroup(params); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		params, ok := decodeSubjectGroupParams(w, r)
+		if !ok {
 			return
 		}
 		item, err := handler.repo.CreateSubjectGroup(r.Context(), tenantID, params)
@@ -264,9 +271,48 @@ func (handler Handler) handleSubjectGroups(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		writeJSON(w, http.StatusCreated, item)
+	case http.MethodPatch:
+		if id == "" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		params, ok := decodeSubjectGroupParams(w, r)
+		if !ok {
+			return
+		}
+		item, err := handler.repo.UpdateSubjectGroup(r.Context(), tenantID, id, params)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update_subject_group_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	case http.MethodDelete:
+		if id == "" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := handler.repo.DeleteSubjectGroup(r.Context(), tenantID, id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete_subject_group_failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
+}
+
+func decodeSubjectGroupParams(w http.ResponseWriter, r *http.Request) (CreateSubjectGroupParams, bool) {
+	var params CreateSubjectGroupParams
+	if err := decodeJSON(r, &params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return CreateSubjectGroupParams{}, false
+	}
+	params = normalizeSubjectGroup(params)
+	if err := validateSubjectGroup(params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return CreateSubjectGroupParams{}, false
+	}
+	return params, true
 }
 
 func (handler Handler) handleSubjectGroupMembers(w http.ResponseWriter, r *http.Request, tenantID string, path string) {

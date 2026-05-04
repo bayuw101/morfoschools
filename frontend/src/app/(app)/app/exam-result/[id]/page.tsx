@@ -19,8 +19,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
-import { createExamApiClient, resolveExamRuntimeIds, type ExamResultReadModel } from "@/lib/exam-api";
-import { initialExams } from "../../exams/data";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamResultReadModel, type ExamRuntimeIds } from "@/lib/exam-api";
+import type { Exam } from "../../exams/data";
+import { getExamDetail } from "../../exams/exam-api";
 import {
   calculateMultipleChoiceScore,
   decodeAnswers,
@@ -31,25 +32,38 @@ import {
 export default function ExamResultPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id, { attemptId: searchParams.get("attempt") ?? undefined }), [exam.id, searchParams]);
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [runtime, setRuntime] = React.useState<ExamRuntimeIds | null>(null);
   const api = React.useMemo(() => createExamApiClient(), []);
   const [serverResult, setServerResult] = React.useState<ExamResultReadModel | null>(null);
   const [resultError, setResultError] = React.useState("");
-  const receipt = serverResult?.receipt?.receiptId ?? searchParams.get("receipt") ?? `RCT-${exam.id.toUpperCase()}`;
+  const receipt = serverResult?.receipt?.receiptId ?? searchParams.get("receipt") ?? "Menunggu receipt server";
   const answers = decodeAnswers(searchParams.get("answers"));
-  const allMultipleChoice = exam.questions.every((question) => question.type === "multiple_choice");
+  const questions = exam?.questions ?? [];
+  const allMultipleChoice = questions.length > 0 && questions.every((question) => question.type === "multiple_choice");
   const teacherAllowsInstantScore = allMultipleChoice;
-  const score = calculateMultipleChoiceScore(exam, answers);
+  const score = exam ? calculateMultipleChoiceScore(exam, answers) : { earned: 0, totalPoints: 0, percentage: 0 };
   const feedback = getFeedbackVisibility({ allAutoGradable: allMultipleChoice, teacherAllowsInstantScore });
-  const sections = groupResultSections(exam.questions);
-  const answeredCount = exam.questions.filter((question) => Boolean(answers[question.id])).length;
+  const sections = groupResultSections(questions);
+  const answeredCount = questions.filter((question) => Boolean(answers[question.id])).length;
   const gradingStatus = serverResult?.grading?.status ?? (teacherAllowsInstantScore ? "completed" : "waiting_for_grading");
   const serverScore = serverResult?.grading && serverResult.grading.maxScore > 0
     ? Math.round((serverResult.grading.finalScore / serverResult.grading.maxScore) * 100)
     : undefined;
 
   React.useEffect(() => {
+    getExamDetail(params.id)
+      .then((item) => {
+        setExam(item);
+        setRuntime(resolveExamRuntimeIds(item.id, { attemptId: searchParams.get("attempt") ?? undefined }));
+      })
+      .catch((error) => {
+        setResultError(error instanceof Error ? error.message : "exam_detail_load_failed");
+      });
+  }, [params.id, searchParams]);
+
+  React.useEffect(() => {
+    if (!runtime) return;
     api
       .getResult(runtime)
       .then((result) => {
@@ -60,6 +74,16 @@ export default function ExamResultPage() {
         setResultError(error instanceof Error ? error.message : "result_lookup_failed");
       });
   }, [api, runtime]);
+
+  if (!exam) {
+    return (
+      <SecureExamShell title="Memuat hasil exam" subtitle="Mengambil receipt dan result dari backend." mode="receipt" receipt allowUnsecure>
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {resultError ? `Gagal memuat hasil: ${resultError}` : "Memuat detail exam dan hasil submit..."}
+        </Panel>
+      </SecureExamShell>
+    );
+  }
 
   return (
     <SecureExamShell title={exam.title} subtitle="Receipt submit dan ringkasan hasil ujian." mode="receipt" receipt allowUnsecure={exam.securityMode === "unsecure_allowed"}>
@@ -89,7 +113,7 @@ export default function ExamResultPage() {
 
       <div className="grid gap-5 md:grid-cols-4">
         <MetricCard label="Receipt" value="Issued" detail="Digital receipt tersedia" icon={FileCheck2} />
-        <MetricCard label="Answered" value={`${answeredCount}/${exam.questions.length}`} detail="Jawaban diterima" icon={ClipboardCheck} />
+        <MetricCard label="Answered" value={`${answeredCount}/${questions.length}`} detail="Jawaban diterima" icon={ClipboardCheck} />
         <MetricCard label="Grading" value={serverResult?.ready ? "Ready" : gradingStatus} detail={serverResult?.message ?? (teacherAllowsInstantScore ? "MC auto-calculate" : "Menunggu koreksi")} icon={Gauge} />
         <MetricCard label="Integrity" value="Stored" detail="Append-only inbox" icon={ShieldCheck} />
       </div>

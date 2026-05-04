@@ -23,8 +23,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { TextareaField } from "@/components/ui/textarea-field";
-import { createExamApiClient, resolveExamRuntimeIds, type ManualGradingQueueItem } from "@/lib/exam-api";
-import { initialExams } from "../../data";
+import { getSession } from "@/lib/auth";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamRuntimeIds, type ManualGradingQueueItem } from "@/lib/exam-api";
+import type { Exam } from "../../data";
+import { getExamDetail } from "../../exam-api";
 
 type SubmissionStatus = "needs_grading" | "partial" | "completed";
 type Submission = {
@@ -110,11 +112,11 @@ function mapManualQueueItem(item: ManualGradingQueueItem): Submission {
 
 export default function ExamGradingPage() {
   const params = useParams<{ id: string }>();
-  const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const [exam, setExam] = React.useState<Exam | null>(null);
+  const [runtime, setRuntime] = React.useState<ExamRuntimeIds | null>(null);
   const api = React.useMemo(() => createExamApiClient(), []);
-  const teacherId = "00000000-0000-4000-8000-000000000201";
-  const essayQuestion = exam.questions.find((question) => question.type === "essay") ?? exam.questions[0];
+  const teacherId = getSession()?.userId ?? "";
+  const essayQuestion = exam?.questions.find((question) => question.type === "essay") ?? exam?.questions[0];
   const [submissions, setSubmissions] = React.useState(submissionsSeed);
   const [serverError, setServerError] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(submissionsSeed[0]?.id ?? "");
@@ -126,6 +128,17 @@ export default function ExamGradingPage() {
   const selectedSubmission = submissions.find((item) => item.id === selectedId) ?? submissions[0];
 
   React.useEffect(() => {
+    getExamDetail(params.id)
+      .then((item) => {
+        setExam(item);
+        const session = getSession();
+        setRuntime(resolveExamRuntimeIds(item.id, { tenantId: session?.tenantId, studentId: session?.userId }));
+      })
+      .catch((error) => setServerError(error instanceof Error ? error.message : "exam_detail_load_failed"));
+  }, [params.id]);
+
+  React.useEffect(() => {
+    if (!runtime || !teacherId) return;
     api
       .listManualGrading(runtime, teacherId)
       .then((queue) => {
@@ -160,7 +173,11 @@ export default function ExamGradingPage() {
   );
 
   async function saveGrade() {
-    const normalizedScore = Math.max(0, Math.min(Number(scoreInput || 0), Number(essayQuestion.points || 20)));
+    if (!runtime || !teacherId || !selectedSubmission) {
+      setServerError("teacher_session_or_submission_missing");
+      return;
+    }
+    const normalizedScore = Math.max(0, Math.min(Number(scoreInput || 0), Number(essayQuestion?.points || 20)));
     try {
       await api.recordManualGrade(runtime, selectedSubmission.id, {
         manualScore: normalizedScore,
@@ -177,6 +194,16 @@ export default function ExamGradingPage() {
           ? { ...submission, essayScore: normalizedScore, status: "completed" }
           : submission,
       ),
+    );
+  }
+
+  if (!exam || !essayQuestion) {
+    return (
+      <div className="space-y-8 pb-12">
+        <Panel className="p-6 text-sm text-[color:var(--muted-foreground)]">
+          {serverError ? `Gagal memuat grading: ${serverError}` : "Memuat detail exam dan queue grading backend..."}
+        </Panel>
+      </div>
     );
   }
 

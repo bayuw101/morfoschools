@@ -9,9 +9,9 @@ import {
 } from "./subject-group-domain";
 
 const groups: SubjectGroupRecord[] = [
-  { id: "sg-math", name: "Matematika X - Pagi", subject: "Matematika", teacher: "Guru Matematika", academicYear: "2025/2026", status: "active", studentIds: ["std-1", "std-2", "std-3"] },
-  { id: "sg-physics", name: "Olimpiade Fisika", subject: "Fisika", teacher: "Guru Fisika", academicYear: "2025/2026", status: "active", studentIds: ["std-4"] },
-  { id: "sg-bahasa", name: "Bahasa Indonesia Remedial", subject: "Bahasa Indonesia", teacher: "Guru Bahasa", academicYear: "2025/2026", status: "draft", studentIds: [] },
+  { id: "sg-math", name: "Matematika X - Pagi", subjectId: "subject-math", subject: "Matematika", teacher: "Guru Matematika", academicYear: "2025/2026", term: "ganjil", status: "active", studentIds: ["std-1", "std-2", "std-3"] },
+  { id: "sg-physics", name: "Olimpiade Fisika", subjectId: "subject-physics", subject: "Fisika", teacher: "Guru Fisika", academicYear: "2025/2026", term: "ganjil", status: "active", studentIds: ["std-4"] },
+  { id: "sg-bahasa", name: "Bahasa Indonesia Remedial", subjectId: "subject-bahasa", subject: "Bahasa Indonesia", teacher: "Guru Bahasa", academicYear: "2025/2026", term: "genap", status: "draft", studentIds: [] },
 ];
 
 const students: SubjectGroupStudentRecord[] = [

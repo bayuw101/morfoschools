@@ -58,7 +58,6 @@ import {
   emptyQuestion,
   emptyTargeting,
   examSchema,
-  initialExams,
   prerequisiteCourseOptions,
   prerequisiteExamOptions,
   questionSchema,
@@ -66,23 +65,46 @@ import {
   subjectGroupOptions,
   subjectOptions,
 } from "../data";
+import { getExamDetail, listExams } from "../exam-api";
 import { fetchApi } from "@/lib/api-client";
 
 export default function ExamManagerPage() {
   const params = useParams<{ id: string }>();
   const examId = params.id;
-  const initialSelectedExam =
-    examId === "new"
-      ? null
-      : (initialExams.find((exam) => exam.id === examId) ?? initialExams[0]);
-
-  const [exams, setExams] = React.useState<Exam[]>(initialExams);
+  const [exams, setExams] = React.useState<Exam[]>([]);
+  const [loadingExams, setLoadingExams] = React.useState(true);
+  const [selectedExam, setSelectedExam] = React.useState<Exam | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = React.useState(examId === "new");
   const [questionOpen, setQuestionOpen] = React.useState(false);
   const [editingQuestion, setEditingQuestion] = React.useState<Question | null>(null);
-  const [selectedExam, setSelectedExam] = React.useState<Exam | null>(
-    initialSelectedExam,
-  );
-  const [isCreatingNew, setIsCreatingNew] = React.useState(examId === "new");
+
+  React.useEffect(() => {
+    listExams()
+      .then((items) => {
+        setExams(items);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingExams(false));
+  }, []);
+
+  React.useEffect(() => {
+    if (examId === "new") {
+      setIsCreatingNew(true);
+      setSelectedExam(null);
+      return;
+    }
+    setIsCreatingNew(false);
+    getExamDetail(examId)
+      .then((exam) => {
+        setSelectedExam(exam);
+        setExams((current) => {
+          const exists = current.some((item) => item.id === exam.id);
+          return exists ? current.map((item) => (item.id === exam.id ? exam : item)) : [exam, ...current];
+        });
+      })
+      .catch(console.error);
+  }, [examId]);
+
   const [query, setQuery] = React.useState("");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
 

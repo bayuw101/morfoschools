@@ -3,6 +3,7 @@ export const appRoutes = {
   appHome: "/app",
   tenants: "/app/tenants",
   users: "/app/users",
+  teachers: "/app/teachers",
   classes: "/app/classes",
   subjectGroups: "/app/subject-groups",
   courses: "/app/courses",

@@ -93,3 +93,19 @@ DELETE FROM tenant_users WHERE tenant_id = $1 AND user_id = $2
 `, tenantID, userID)
 	return err
 }
+
+func (repo PostgresRepository) UpdatePassword(ctx context.Context, tenantID string, userID string, passwordHash string) error {
+	_, err := repo.pool.Exec(ctx, `
+UPDATE users
+SET password_hash = $3,
+    status = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
+    updated_at = now()
+WHERE id = $2
+  AND EXISTS (
+      SELECT 1 FROM tenant_users
+      WHERE tenant_users.tenant_id = $1
+        AND tenant_users.user_id = users.id
+  )
+`, tenantID, userID, passwordHash)
+	return err
+}

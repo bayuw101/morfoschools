@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   BookOpenCheck,
   Edit3,
+  KeyRound,
   Trash2,
   GraduationCap,
   Mail,
@@ -31,6 +32,7 @@ import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { calculateStudentMetrics, filterStudents, type StudentDomainRecord } from "./student-domain";
 import { fetchApi } from "@/lib/api-client";
+import { canSubmitPasswordChange, normalizePasswordPayload, type PasswordFormValues } from "../users/password-domain";
 
 const studentSchema = z.object({
   nisn: z.string().min(4, "NISN minimal 4 karakter"),
@@ -65,6 +67,24 @@ const emptyStudent: StudentForm = {
   guardianPhone: "",
   status: "active",
 };
+
+function normalizeStudentRecord(student: Partial<Student>): Student {
+  return {
+    id: student.id ?? crypto.randomUUID(),
+    userId: student.userId,
+    nisn: student.nisn ?? "",
+    name: student.name ?? "Tanpa nama",
+    email: student.email ?? "",
+    classSection: student.classSection ?? "Belum ada kelas",
+    guardianName: student.guardianName ?? "-",
+    guardianPhone: student.guardianPhone ?? "-",
+    status: student.status ?? "active",
+    subjectGroups: Array.isArray(student.subjectGroups) ? student.subjectGroups : [],
+    courses: typeof student.courses === "number" ? student.courses : 0,
+    exams: typeof student.exams === "number" ? student.exams : 0,
+    risk: student.risk ?? "normal",
+  };
+}
 
 const initialStudents: Student[] = [
   {
@@ -115,8 +135,8 @@ export default function StudentsPage() {
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loadingStudents, setLoadingStudents] = React.useState(true);
   React.useEffect(() => {
-    fetchApi<{ data: Student[] }>("/api/v1/students")
-      .then(res => setStudents(res.data || []))
+    fetchApi<{ data: Partial<Student>[] }>("/api/v1/students")
+      .then(res => setStudents((res.data || []).map(normalizeStudentRecord)))
       .catch(err => console.error("Failed to fetch students", err))
       .finally(() => setLoadingStudents(false));
   }, []);
@@ -125,6 +145,9 @@ export default function StudentsPage() {
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
   const [confirmStudent, setConfirmStudent] = React.useState<Student | null>(null);
+  const [passwordStudent, setPasswordStudent] = React.useState<Student | null>(null);
+  const [passwordValues, setPasswordValues] = React.useState<PasswordFormValues>({ password: "", confirmPassword: "" });
+  const [savingPassword, setSavingPassword] = React.useState(false);
 
   const {
     register,
@@ -169,14 +192,36 @@ const method = editingStudent ? "PATCH" : "POST";
         body: JSON.stringify(values),
       });
 
+      const normalizedSaved = normalizeStudentRecord(saved);
       if (editingStudent) {
-        setStudents((current) => current.map((student) => student.id === editingStudent.id ? { ...student, ...saved } : student));
+        setStudents((current) => current.map((student) => student.id === editingStudent.id ? normalizeStudentRecord({ ...student, ...normalizedSaved }) : student));
       } else {
-        setStudents((current) => [saved, ...current]);
+        setStudents((current) => [normalizedSaved, ...current]);
       }
       setSheetOpen(false);
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  function openPassword(student: Student) {
+    setPasswordStudent(student);
+    setPasswordValues({ password: "", confirmPassword: "" });
+  }
+
+  async function updateStudentPassword() {
+    if (!passwordStudent?.userId || !canSubmitPasswordChange(passwordValues)) return;
+    setSavingPassword(true);
+    try {
+      await fetchApi(`/api/v1/users/${passwordStudent.userId}/password`, {
+        method: "PATCH",
+        body: JSON.stringify(normalizePasswordPayload(passwordValues)),
+      });
+      setPasswordStudent(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setSavingPassword(false);
     }
   }
 

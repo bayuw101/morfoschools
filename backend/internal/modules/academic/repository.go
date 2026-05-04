@@ -238,3 +238,35 @@ RETURNING id::text, group_id::text, student_id::text, status
 `, tenantID, groupID, params.StudentID).Scan(&item.ID, &item.GroupID, &item.StudentID, &item.Status)
 	return item, err
 }
+
+func (repo PostgresRepository) UpdateSubject(ctx context.Context, tenantID string, id string, params CreateSubjectParams) (Subject, error) {
+	var item Subject
+	err := repo.pool.QueryRow(ctx, `
+UPDATE subjects 
+SET name = $1, code = $2, group_name = $3, updated_at = now()
+WHERE tenant_id = $4 AND id = $5
+RETURNING id::text, code, name, group_name, status
+`, params.Name, params.Code, params.GroupName, tenantID, id).Scan(&item.ID, &item.Code, &item.Name, &item.GroupName, &item.Status)
+	return item, err
+}
+
+func (repo PostgresRepository) DeleteSubject(ctx context.Context, tenantID string, id string) error {
+	_, err := repo.pool.Exec(ctx, "DELETE FROM subjects WHERE tenant_id = $1 AND id = $2", tenantID, id)
+	return err
+}
+
+func (repo PostgresRepository) UpdateSubjectGroup(ctx context.Context, tenantID string, id string, params CreateSubjectGroupParams) (SubjectGroup, error) {
+	var item SubjectGroup
+	err := repo.pool.QueryRow(ctx, `
+UPDATE subject_groups 
+SET name = $1, academic_year = $2, term = $3, updated_at = now()
+WHERE tenant_id = $4 AND id = $5
+RETURNING id::text, subject_id::text, name, academic_year, term, status
+`, params.Name, params.AcademicYear, params.Term, tenantID, id).Scan(&item.ID, &item.SubjectID, &item.Name, &item.AcademicYear, &item.Term, &item.Status)
+	return item, err
+}
+
+func (repo PostgresRepository) DeleteSubjectGroup(ctx context.Context, tenantID string, id string) error {
+	_, err := repo.pool.Exec(ctx, "DELETE FROM subject_groups WHERE tenant_id = $1 AND id = $2", tenantID, id)
+	return err
+}

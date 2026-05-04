@@ -98,6 +98,10 @@ type Repository interface {
 	CreateTeachingAssignment(ctx context.Context, tenantID string, params CreateTeachingAssignmentParams) (TeachingAssignment, error)
 	ListSubjectGroups(ctx context.Context, tenantID string) ([]SubjectGroup, error)
 	CreateSubjectGroup(ctx context.Context, tenantID string, params CreateSubjectGroupParams) (SubjectGroup, error)
+	UpdateSubject(ctx context.Context, tenantID string, id string, params CreateSubjectParams) (Subject, error)
+	DeleteSubject(ctx context.Context, tenantID string, id string) error
+	UpdateSubjectGroup(ctx context.Context, tenantID string, id string, params CreateSubjectGroupParams) (SubjectGroup, error)
+	DeleteSubjectGroup(ctx context.Context, tenantID string, id string) error
 	ListSubjectGroupMembers(ctx context.Context, tenantID string, groupID string) ([]SubjectGroupMember, error)
 	AddSubjectGroupMember(ctx context.Context, tenantID string, groupID string, params AddSubjectGroupMemberParams) (SubjectGroupMember, error)
 }
@@ -128,6 +132,10 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/v1/academic/subject-groups":
 		handler.handleSubjectGroups(w, r, tenantID)
 	default:
+		if strings.HasPrefix(path, "/api/v1/academic/subject-groups/") && !strings.HasSuffix(path, "/members") {
+			handler.handleSubjectGroups(w, r, tenantID)
+			return
+		}
 		if strings.HasPrefix(path, "/api/v1/academic/subject-groups/") && strings.HasSuffix(path, "/members") {
 			handler.handleSubjectGroupMembers(w, r, tenantID, path)
 			return
@@ -239,6 +247,7 @@ func (handler Handler) handleSubjectGroups(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, map[string][]SubjectGroup{"data": items})
 	case http.MethodPost:
+
 		var params CreateSubjectGroupParams
 		if err := decodeJSON(r, &params); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
@@ -416,4 +425,12 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func extractBetween(path, prefix, suffix string) string {
+	trimmed := strings.TrimPrefix(path, prefix)
+	if suffix != "" {
+		trimmed = strings.TrimSuffix(trimmed, suffix)
+	}
+	return strings.TrimSpace(trimmed)
 }

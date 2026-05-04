@@ -26,6 +26,23 @@ type fakeAcademicRepository struct {
 	err                 error
 }
 
+func (repo *fakeAcademicRepository) UpdateSubject(ctx context.Context, tenantID string, id string, params CreateSubjectParams) (Subject, error) {
+	repo.capturedTenant = tenantID
+	return Subject{ID: id, Code: params.Code, Name: params.Name, GroupName: params.GroupName, Status: "active"}, repo.err
+}
+func (repo *fakeAcademicRepository) DeleteSubject(ctx context.Context, tenantID string, id string) error {
+	repo.capturedTenant = tenantID
+	return repo.err
+}
+func (repo *fakeAcademicRepository) UpdateSubjectGroup(ctx context.Context, tenantID string, id string, params CreateSubjectGroupParams) (SubjectGroup, error) {
+	repo.capturedTenant = tenantID
+	return SubjectGroup{ID: id, Name: params.Name, AcademicYear: params.AcademicYear, Term: params.Term, Status: "active"}, repo.err
+}
+func (repo *fakeAcademicRepository) DeleteSubjectGroup(ctx context.Context, tenantID string, id string) error {
+	repo.capturedTenant = tenantID
+	return repo.err
+}
+
 func (repo *fakeAcademicRepository) ListSubjects(ctx context.Context, tenantID string) ([]Subject, error) {
 	repo.capturedTenant = tenantID
 	return repo.subjects, repo.err

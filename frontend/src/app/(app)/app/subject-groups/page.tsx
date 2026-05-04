@@ -15,6 +15,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { fetchApi } from "@/lib/api-client";
 import {
   calculateSubjectGroupMetrics,
   filterSubjectGroups,
@@ -64,6 +65,26 @@ const classFilterOptions = [{ label: "Semua kelas", value: "all" }, ...Array.fro
 
 export default function SubjectGroupsPage() {
   const [groups, setGroups] = React.useState<SubjectGroup[]>(initialGroups);
+  
+  React.useEffect(() => {
+    fetchApi<{ data: any[] }>('/api/v1/academic/subject-groups')
+      .then(res => {
+         if (res.data && res.data.length > 0) {
+           const mapped: SubjectGroup[] = res.data.map((sg: any) => ({
+             id: sg.id,
+             name: sg.name,
+             subject: sg.subjectName || "Subject " + sg.subjectId,
+             teacher: "Assigned Teacher", // requires teaching assignment join
+             academicYear: sg.academicYear,
+             status: sg.status,
+             studentIds: Array.from({ length: sg.memberCount }).map((_, i) => "std-" + i)
+           }));
+           setGroups(mapped);
+         }
+      })
+      .catch(console.error);
+  }, []);
+
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [membersOpen, setMembersOpen] = React.useState(false);
   const [editingGroup, setEditingGroup] = React.useState<SubjectGroup | null>(null);

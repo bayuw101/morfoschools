@@ -11,10 +11,12 @@ func (repo PostgresSubmissionRepository) CheckGate(ctx context.Context, tenantID
 	decision := ExamGateDecision{ExamID: examID, StudentID: command.StudentID, Reasons: []string{}}
 	var eligible bool
 	var blockedReasons []byte
+	var accessToken string
+	var isUsed bool
 	err := repo.pool.QueryRow(ctx, `
-SELECT eligibility_status = 'eligible', blocking_reasons
+SELECT eligibility_status = 'eligible', blocking_reasons, access_token, is_used
 FROM exam_eligible_students
-WHERE tenant_id=$1 AND exam_id=$2 AND student_id=$3`, tenantID, examID, command.StudentID).Scan(&eligible, &blockedReasons)
+WHERE tenant_id=$1 AND exam_id=$2 AND student_id=$3`, tenantID, examID, command.StudentID).Scan(&eligible, &blockedReasons, &accessToken, &isUsed)
 	if err != nil {
 		decision.Reasons = append(decision.Reasons, "not_eligible")
 		return decision, nil
@@ -47,8 +49,19 @@ SELECT EXISTS (
 		decision.Reasons = append(decision.Reasons, "gate_closed_or_password_invalid")
 		return decision, nil
 	}
+	if isUsed {
+		decision.Reasons = append(decision.Reasons, "token_already_used_active_session_exists")
+		return decision, nil
+	}
+
+	// Mark token as used
+	_, err = repo.pool.Exec(ctx, `UPDATE exam_eligible_students SET is_used = true, used_at = now() WHERE tenant_id=$1 AND exam_id=$2 AND student_id=$3`, tenantID, examID, command.StudentID)
+	if err != nil {
+		return ExamGateDecision{}, err
+	}
+
 	decision.Allowed = true
-	decision.GateToken = generateGateToken()
+	decision.GateToken = accessToken
 	return decision, nil
 }
 

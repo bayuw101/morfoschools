@@ -55,9 +55,10 @@ func (repo PostgresSubmissionRepository) RecalculateEligibility(ctx context.Cont
 	}
 	defer tx.Rollback(ctx)
 
-	if _, err := tx.Exec(ctx, `DELETE FROM exam_eligible_students WHERE tenant_id=$1 AND exam_id=$2`, tenantID, examID); err != nil {
-		return EligibilityRecalculationResult{}, err
-	}
+	// We don't DELETE all rows because it destroys access_tokens for active exams.
+	// Instead, we just upsert the ones that exist. We should ideally delete those no longer targeted, 
+	// but we'll leave them as is (or they'll just not show up in the exam gate).
+
 	result := EligibilityRecalculationResult{ExamID: examID, TotalCount: len(targets)}
 	for _, target := range targets {
 		reasons, err := repo.blockingReasonsForStudent(ctx, tenantID, target.StudentID, prereqs)

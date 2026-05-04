@@ -44,6 +44,8 @@ func main() {
 		mux.Handle("/api/v1/academic/subjects", academicHandler)
 		mux.Handle("/api/v1/academic/course-offerings", academicHandler)
 		mux.Handle("/api/v1/academic/teaching-assignments", academicHandler)
+		mux.Handle("/api/v1/academic/subject-groups", academicHandler)
+		mux.Handle("/api/v1/academic/subject-groups/", academicHandler)
 		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
 		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))

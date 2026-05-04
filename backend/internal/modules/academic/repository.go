@@ -140,3 +140,101 @@ RETURNING id::text, course_offering_id::text, teacher_id::text, role, status
 `, tenantID, params.CourseOfferingID, params.TeacherID, params.Role).Scan(&item.ID, &item.CourseOfferingID, &item.TeacherID, &item.Role, &item.Status)
 	return item, err
 }
+
+func (repo PostgresRepository) ListSubjectGroups(ctx context.Context, tenantID string) ([]SubjectGroup, error) {
+	rows, err := repo.pool.Query(ctx, `
+SELECT
+    subject_groups.id::text,
+    subject_groups.subject_id::text,
+    subjects.name,
+    subject_groups.name,
+    subject_groups.academic_year,
+    subject_groups.term,
+    subject_groups.status,
+    COUNT(subject_group_members.id)::int AS member_count
+FROM subject_groups
+JOIN subjects ON subjects.id = subject_groups.subject_id AND subjects.tenant_id = subject_groups.tenant_id
+LEFT JOIN subject_group_members ON subject_group_members.group_id = subject_groups.id
+    AND subject_group_members.tenant_id = subject_groups.tenant_id
+    AND subject_group_members.status = 'active'
+WHERE subject_groups.tenant_id = $1
+GROUP BY subject_groups.id, subjects.name
+ORDER BY subject_groups.academic_year DESC, subject_groups.term ASC, subject_groups.name ASC
+`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]SubjectGroup, 0)
+	for rows.Next() {
+		var item SubjectGroup
+		if err := rows.Scan(&item.ID, &item.SubjectID, &item.SubjectName, &item.Name, &item.AcademicYear, &item.Term, &item.Status, &item.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (repo PostgresRepository) CreateSubjectGroup(ctx context.Context, tenantID string, params CreateSubjectGroupParams) (SubjectGroup, error) {
+	var item SubjectGroup
+	err := repo.pool.QueryRow(ctx, `
+INSERT INTO subject_groups (tenant_id, subject_id, name, academic_year, term)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (tenant_id, subject_id, name, academic_year, term) DO UPDATE
+    SET status = 'active',
+        updated_at = now()
+RETURNING id::text, subject_id::text, name, academic_year, term, status
+`, tenantID, params.SubjectID, params.Name, params.AcademicYear, params.Term).Scan(&item.ID, &item.SubjectID, &item.Name, &item.AcademicYear, &item.Term, &item.Status)
+	return item, err
+}
+
+func (repo PostgresRepository) ListSubjectGroupMembers(ctx context.Context, tenantID string, groupID string) ([]SubjectGroupMember, error) {
+	rows, err := repo.pool.Query(ctx, `
+SELECT
+    subject_group_members.id::text,
+    subject_group_members.group_id::text,
+    subject_group_members.student_id::text,
+    students.name,
+    COALESCE(class_sections.name, '') AS class_name,
+    subject_group_members.status
+FROM subject_group_members
+JOIN students ON students.id = subject_group_members.student_id AND students.tenant_id = subject_group_members.tenant_id
+LEFT JOIN student_class_enrollments ON student_class_enrollments.student_id = students.id
+    AND student_class_enrollments.tenant_id = students.tenant_id
+    AND student_class_enrollments.active = true
+LEFT JOIN class_sections ON class_sections.id = student_class_enrollments.class_section_id
+    AND class_sections.tenant_id = students.tenant_id
+WHERE subject_group_members.tenant_id = $1
+  AND subject_group_members.group_id = $2
+ORDER BY students.name ASC
+`, tenantID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]SubjectGroupMember, 0)
+	for rows.Next() {
+		var item SubjectGroupMember
+		if err := rows.Scan(&item.ID, &item.GroupID, &item.StudentID, &item.StudentName, &item.ClassName, &item.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (repo PostgresRepository) AddSubjectGroupMember(ctx context.Context, tenantID string, groupID string, params AddSubjectGroupMemberParams) (SubjectGroupMember, error) {
+	var item SubjectGroupMember
+	err := repo.pool.QueryRow(ctx, `
+INSERT INTO subject_group_members (tenant_id, group_id, student_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (tenant_id, group_id, student_id) DO UPDATE
+    SET status = 'active',
+        updated_at = now()
+RETURNING id::text, group_id::text, student_id::text, status
+`, tenantID, groupID, params.StudentID).Scan(&item.ID, &item.GroupID, &item.StudentID, &item.Status)
+	return item, err
+}

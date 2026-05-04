@@ -47,7 +47,8 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `subjects`
   - [x] `course_offerings`
   - [x] `teaching_assignments`
-  - [ ] `subject_group_memberships`
+  - [x] `subject_groups`
+  - [x] `subject_group_members`
 - [ ] Course tables:
   - [ ] `courses`
   - [ ] `course_modules`
@@ -101,7 +102,10 @@ Start small with tenancy + health.
 - [x] `POST /api/v1/academic/course-offerings` creates/activates course offerings
 - [x] `GET /api/v1/academic/teaching-assignments` lists teacher assignments
 - [x] `POST /api/v1/academic/teaching-assignments` assigns teachers to course offerings
-- [ ] subject group membership backend API
+- [x] `GET /api/v1/academic/subject-groups` lists flexible academic groups
+- [x] `POST /api/v1/academic/subject-groups` creates/activates subject groups by subject/year/term
+- [x] `GET /api/v1/academic/subject-groups/{group_id}/members` lists cross-class group members
+- [x] `POST /api/v1/academic/subject-groups/{group_id}/members` adds/reactivates a student membership
 
 ## Verification
 
@@ -125,3 +129,4 @@ Start small with tenancy + health.
 - 2026-05-04: Started BE-3 identity foundation. Added TDD coverage and implementation for `GET /api/v1/users` and `POST /api/v1/users`, with tenant context required, email/name/role validation, global `users` upsert, and tenant membership role assignment through `tenant_users`.
 - 2026-05-04: Added lightweight auth context and role authorization middleware. `authctx.Middleware` reads `X-User-ID`/`X-User-Role`, stores the authenticated user in request context, and `RequireRoles(...)` returns `401 user_required` or `403 role_forbidden` for protected routes. This is a temporary boundary until proper session/JWT tokens are implemented.
 - 2026-05-04: Completed BE-4 academic foundation slice. Added `subjects`, `course_offerings`, and `teaching_assignments` migration plus TDD-covered academic handlers/repository for subject CRUD, subject-to-class course offerings, and teacher assignments. This preserves the administrative-vs-academic model: `class_sections` remain administrative, while `course_offerings` link classes to subjects for learning/exam targeting.
+- 2026-05-04: Completed subject group membership backend. Added `subject_groups` and `subject_group_members` migration plus TDD-covered APIs for flexible cross-class academic groups and student membership, enabling lintas minat/remedial/enrichment targeting without changing administrative class enrollment.

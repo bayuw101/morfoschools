@@ -15,10 +15,14 @@ type fakeAcademicRepository struct {
 	subjects            []Subject
 	courseOfferings     []CourseOffering
 	teachingAssignments []TeachingAssignment
+	subjectGroups       []SubjectGroup
+	groupMembers        []SubjectGroupMember
 	capturedTenant      string
 	capturedSubject     CreateSubjectParams
 	capturedOffering    CreateCourseOfferingParams
 	capturedAssignment  CreateTeachingAssignmentParams
+	capturedGroup       CreateSubjectGroupParams
+	capturedMember      AddSubjectGroupMemberParams
 	err                 error
 }
 
@@ -62,6 +66,36 @@ func (repo *fakeAcademicRepository) CreateTeachingAssignment(ctx context.Context
 		return TeachingAssignment{}, repo.err
 	}
 	return TeachingAssignment{ID: "assignment-1", CourseOfferingID: params.CourseOfferingID, TeacherID: params.TeacherID, Role: params.Role, Status: "active"}, nil
+}
+
+func (repo *fakeAcademicRepository) ListSubjectGroups(ctx context.Context, tenantID string) ([]SubjectGroup, error) {
+	repo.capturedTenant = tenantID
+	return repo.subjectGroups, repo.err
+}
+
+func (repo *fakeAcademicRepository) CreateSubjectGroup(ctx context.Context, tenantID string, params CreateSubjectGroupParams) (SubjectGroup, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedGroup = params
+	if repo.err != nil {
+		return SubjectGroup{}, repo.err
+	}
+	return SubjectGroup{ID: "group-1", SubjectID: params.SubjectID, Name: params.Name, AcademicYear: params.AcademicYear, Term: params.Term, Status: "active"}, nil
+}
+
+func (repo *fakeAcademicRepository) ListSubjectGroupMembers(ctx context.Context, tenantID string, groupID string) ([]SubjectGroupMember, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedGroup.GroupID = groupID
+	return repo.groupMembers, repo.err
+}
+
+func (repo *fakeAcademicRepository) AddSubjectGroupMember(ctx context.Context, tenantID string, groupID string, params AddSubjectGroupMemberParams) (SubjectGroupMember, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedGroup.GroupID = groupID
+	repo.capturedMember = params
+	if repo.err != nil {
+		return SubjectGroupMember{}, repo.err
+	}
+	return SubjectGroupMember{ID: "member-1", GroupID: groupID, StudentID: params.StudentID, Status: "active"}, nil
 }
 
 func TestAcademicRoutesRequireTenantContext(t *testing.T) {
@@ -186,6 +220,120 @@ func TestCreateTeachingAssignmentRejectsInvalidRole(t *testing.T) {
 	handler := tenantctx.Middleware(NewHandler(&fakeAcademicRepository{}))
 	body := `{"courseOfferingId":"offering-1","teacherId":"teacher-1","role":"observer"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/academic/teaching-assignments", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListSubjectGroupsReturnsTenantScopedGroups(t *testing.T) {
+	repo := &fakeAcademicRepository{subjectGroups: []SubjectGroup{{ID: "group-1", SubjectID: "subject-1", SubjectName: "Matematika", Name: "Matematika Lintas Minat", AcademicYear: "2026/2027", Term: "ganjil", Status: "active", MemberCount: 12}}}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/academic/subject-groups", nil)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" {
+		t.Fatalf("expected tenant-1 lookup, got %q", repo.capturedTenant)
+	}
+	var payload struct {
+		Data []SubjectGroup `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if len(payload.Data) != 1 || payload.Data[0].MemberCount != 12 || payload.Data[0].Name != "Matematika Lintas Minat" {
+		t.Fatalf("unexpected groups payload: %+v", payload.Data)
+	}
+}
+
+func TestCreateSubjectGroupNormalizesAcademicScope(t *testing.T) {
+	repo := &fakeAcademicRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	body := `{"subjectId":"subject-1","name":" Matematika Lintas Minat ","academicYear":"2026/2027","term":" Ganjil "}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/academic/subject-groups", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedGroup.SubjectID != "subject-1" || repo.capturedGroup.Name != "Matematika Lintas Minat" || repo.capturedGroup.Term != "ganjil" {
+		t.Fatalf("unexpected group params: %+v", repo.capturedGroup)
+	}
+}
+
+func TestCreateSubjectGroupRejectsInvalidTerm(t *testing.T) {
+	handler := tenantctx.Middleware(NewHandler(&fakeAcademicRepository{}))
+	body := `{"subjectId":"subject-1","name":"Group A","academicYear":"2026/2027","term":"summer"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/academic/subject-groups", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListSubjectGroupMembersCapturesGroupID(t *testing.T) {
+	repo := &fakeAcademicRepository{groupMembers: []SubjectGroupMember{{ID: "member-1", GroupID: "group-1", StudentID: "student-1", StudentName: "Siswa A", ClassName: "10-A", Status: "active"}}}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/academic/subject-groups/group-1/members", nil)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedGroup.GroupID != "group-1" {
+		t.Fatalf("expected group-1 lookup, got %q", repo.capturedGroup.GroupID)
+	}
+	var payload struct {
+		Data []SubjectGroupMember `json:"data"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if len(payload.Data) != 1 || payload.Data[0].StudentName != "Siswa A" {
+		t.Fatalf("unexpected members payload: %+v", payload.Data)
+	}
+}
+
+func TestAddSubjectGroupMemberCapturesStudentLink(t *testing.T) {
+	repo := &fakeAcademicRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/academic/subject-groups/group-1/members", bytes.NewBufferString(`{"studentId":"student-1"}`))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedGroup.GroupID != "group-1" || repo.capturedMember.StudentID != "student-1" {
+		t.Fatalf("unexpected member params: group=%+v member=%+v", repo.capturedGroup, repo.capturedMember)
+	}
+}
+
+func TestAddSubjectGroupMemberRejectsBlankStudent(t *testing.T) {
+	handler := tenantctx.Middleware(NewHandler(&fakeAcademicRepository{}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/academic/subject-groups/group-1/members", bytes.NewBufferString(`{"studentId":" "}`))
 	req.Header.Set(tenantctx.HeaderName, "tenant-1")
 	rec := httptest.NewRecorder()
 

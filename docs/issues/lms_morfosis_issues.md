@@ -65,6 +65,7 @@
 *   UI & API untuk membuat Subject Groups (Academic Group).
 *   Mekanisme memasukkan murid dari berbagai Class Sections ke satu Subject Group.
 *   Implementation note: Added `/app/subject-groups` review surface with Subject Group CRUD, cross-section student membership management, class-section filtering, and academic-vs-administrative guardrail copy.
+*   Backend note: Added `subject_groups` and `subject_group_members` schema plus tenant-scoped APIs for listing/creating subject groups and listing/adding members at `/api/v1/academic/subject-groups` and `/api/v1/academic/subject-groups/{group_id}/members`.
 
 ## Epic 3: Courses Module (Vertical Slice)
 *Tujuan: Guru bisa membuat materi dan murid bisa membacanya.*

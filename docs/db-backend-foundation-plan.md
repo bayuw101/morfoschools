@@ -27,7 +27,7 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `internal/platform/http`
   - [x] `internal/platform/db`
   - [x] `internal/modules/tenancy`
-  - [ ] `internal/modules/identity`
+  - [x] `internal/modules/identity`
   - [ ] `internal/modules/academic`
   - [ ] `internal/modules/exams`
   - [x] `migrations`
@@ -86,6 +86,13 @@ Start small with tenancy + health.
 - [x] `GET /api/v1/receipts/{receipt_id}` verifies a tenant-scoped digital receipt without touching external services
 - [x] relay inbox rows to NATS JetStream asynchronously
 
+## Phase BE-3 — Identity Foundation
+
+- [x] `GET /api/v1/users` lists tenant-scoped users
+- [x] `POST /api/v1/users` creates or updates a global user and tenant membership role
+- [ ] authentication/session tokens
+- [ ] role authorization middleware
+
 ## Verification
 
 - [x] `docker compose config`
@@ -105,3 +112,4 @@ Start small with tenancy + health.
 - 2026-05-04: Added autosave ingestion slice. `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/autosave` now reuses the same append-only inbox path with `submission_kind = 'autosave'`, returns an immediate digital receipt, and keeps final submit distinguishable as `final_submit` for downstream workers.
 - 2026-05-04: Added tenant-scoped receipt verification endpoint. `GET /api/v1/receipts/{receipt_id}` returns accepted receipt metadata, submission kind, received timestamp, and relay status so students/operators can verify proof-of-submission independently from async grading/relay state.
 - 2026-05-04: Completed first asynchronous NATS JetStream relay. Backend now connects to `NATS_URL`, auto-creates the file-backed `MORFOSIS_EXAM_SUBMISSIONS` stream if missing, polls unrelayed inbox rows, prioritizes `final_submit` before `autosave`, publishes events to `morfosis.exam.submissions.{kind}`, then marks rows relayed only after successful publish.
+- 2026-05-04: Started BE-3 identity foundation. Added TDD coverage and implementation for `GET /api/v1/users` and `POST /api/v1/users`, with tenant context required, email/name/role validation, global `users` upsert, and tenant membership role assignment through `tenant_users`.

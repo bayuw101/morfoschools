@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
+	"github.com/bayuw101/morfoschools/internal/modules/identity"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
 	"github.com/bayuw101/morfoschools/internal/platform/config"
 	"github.com/bayuw101/morfoschools/internal/platform/db"
@@ -36,6 +37,7 @@ func main() {
 	if dbPool != nil {
 		pgxPool := dbPool.PgxPool()
 		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
+		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
 		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
 		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))

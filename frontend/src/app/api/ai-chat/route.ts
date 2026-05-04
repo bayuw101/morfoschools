@@ -164,11 +164,23 @@ function formatTeacherList(teachers: BackendUser[]) {
 
 
 type PlannedAction = {
-  action?: "check_exam_schedule" | "create_class" | "create_teacher" | "create_exam" | "add_question" | "ask_followup" | "none";
+  action?:
+    | "check_exam_schedule"
+    | "create_class"
+    | "create_teacher"
+    | "create_exam"
+    | "propose_questions"
+    | "revise_question_draft"
+    | "add_question"
+    | "add_selected_questions"
+    | "ask_followup"
+    | "none";
   params?: Record<string, unknown>;
   examId?: string;
   missing?: string[];
   question?: string;
+  selectedQuestionIds?: string[];
+  questions?: Array<Record<string, unknown>>;
 };
 
 type BackendExam = { id?: string; title?: string; subjectName?: string; status?: string; durationMinutes?: number; securityMode?: string };
@@ -229,7 +241,14 @@ function naturalIntent(text: string) {
   if (wantsSchedule) return "check_exam_schedule";
   if (wantsCreate && normalized.includes("kelas")) return "create_class";
   if (wantsCreate && (normalized.includes("guru") || normalized.includes("teacher"))) return "create_teacher";
+  const wantsQuestion = ["soal", "pertanyaan", "question", "pilihan ganda", "essay", "esai", "stimulus"].some((word) => normalized.includes(word));
+  const wantsSuggestion = ["suggest", "saran", "rekomendasi", "bantu", "ide", "contoh"].some((word) => normalized.includes(word));
+  const wantsRevision = ["revisi", "ubah", "perbaiki", "ganti", "tambahkan stimulus", "pakai stimulus"].some((word) => normalized.includes(word));
+  const wantsSelection = /\b(a|b|c|d|e|1|2|3|4|5)\b/.test(normalized) && ["masukkan", "input", "tambahkan", "pakai", "pilih"].some((word) => normalized.includes(word));
   if (wantsCreate && (normalized.includes("exam") || normalized.includes("ujian"))) return "create_exam";
+  if (wantsQuestion && wantsSelection) return "add_selected_questions";
+  if (wantsQuestion && wantsRevision) return "revise_question_draft";
+  if (wantsQuestion && (wantsCreate || wantsSuggestion)) return "propose_questions";
   return "none";
 }
 
@@ -243,7 +262,10 @@ Action yang tersedia:
 - create_class: user ingin membuat/menambah kelas. params: name, gradeLevel, academicYear, homeroomTeacher, status, studentIds.
 - create_teacher: user menyetujui membuat guru atau meminta tambah guru. params: name, email.
 - create_exam: user ingin membuat ujian/exam. params: title, subjectName, status, durationMinutes, securityMode.
-- add_question: user ingin menambah soal. wajib examId dan params questionType, prompt, position, points, options, rubric.
+- propose_questions: user meminta bantuan berpikir/ide/saran soal untuk exam. params: examId bila diketahui, subjectName, topic, gradeLevel, questionType, count, points, includeStimulus. Jangan langsung insert ke backend.
+- revise_question_draft: user meminta revisi soal/stimulus/opsi/jawaban dari draft yang sudah kamu tampilkan. params berisi instruksi revisi dan draft target bila bisa diekstrak. Jangan langsung insert ke backend.
+- add_question: user memberi satu soal final yang lengkap untuk ditambahkan. wajib examId dan params questionType, prompt, position, points, options, rubric.
+- add_selected_questions: user meminta memasukkan soal A/B/C atau 1/2/3 dari list draft yang sudah kamu tampilkan. wajib examId dan questions array berisi payload soal siap POST.
 - ask_followup: data wajib belum lengkap. Sertakan missing dan question natural dalam Bahasa Indonesia.
 - none: bukan aksi backend.
 
@@ -251,7 +273,11 @@ Rules:
 - Untuk create_class wajib minimal name, gradeLevel, academicYear, homeroomTeacher. Jika kurang, ask_followup.
 - Untuk create_teacher wajib name dan email. Jika kurang, ask_followup.
 - Untuk create_exam wajib title, subjectName, durationMinutes. Default status=draft, securityMode=standard jika tidak disebut.
+- Setelah create_exam berhasil, tawarkan untuk menyusun beberapa draft soal lengkap dengan jawaban dan minta guru memilih A/B/C atau 1/2/3.
+- Untuk propose_questions, buat beberapa draft soal pedagogis lengkap dengan jawaban benar/rubrik. Jika user minta stimulus, sertakan stimulus dalam prompt soal.
+- Untuk revise_question_draft, revisi draft sesuai instruksi guru dan tampilkan ulang sebagai opsi yang bisa dipilih.
 - Untuk add_question wajib examId, questionType, prompt, position, points. Jika pilihan ganda, options wajib.
+- Untuk add_selected_questions, baca riwayat assistant terakhir yang memuat draft soal, ekstrak opsi yang diminta guru, dan kembalikan questions array siap POST.
 - Jangan minta user menulis JSON atau slash command. Tanyakan data secara natural.
 
 Contoh output: {"action":"check_exam_schedule","params":{}}
@@ -271,7 +297,77 @@ Contoh followup: {"action":"ask_followup","missing":["homeroomTeacher"],"questio
   return JSON.parse(jsonText) as PlannedAction;
 }
 
-async function runPlannedAction(plan: PlannedAction, session: AiSession, backendBaseUrl: string) {
+
+function stringifyParam(value: unknown, fallback = "-") {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return value ? "ya" : "tidak";
+  return fallback;
+}
+
+function formatQuestionDrafts(questions: Array<Record<string, unknown>>, intro = "Aku siapkan beberapa draft soal. Pilih A/B/C atau 1/2/3 mana yang ingin dimasukkan ke exam, atau minta revisi/stimulus tambahan.") {
+  if (questions.length === 0) return "Aku belum punya draft soal yang cukup. Sebutkan topik, tingkat kelas, dan tipe soal yang diinginkan.";
+  const labels = ["A", "B", "C", "D", "E"];
+  const rendered = questions.map((question, index) => {
+    const label = labels[index] ?? String(index + 1);
+    const options = Array.isArray(question.options)
+      ? question.options
+          .map((option) => {
+            const item = option as Record<string, unknown>;
+            const marker = item.isCorrect ? " ✓" : "";
+            return `   - ${String(item.id ?? "?").toUpperCase()}. ${stringifyParam(item.text)}${marker}`;
+          })
+          .join("\n")
+      : "";
+    return [
+      `${label}. ${stringifyParam(question.questionType, "multiple_choice")} · ${stringifyParam(question.points, "10")} poin`,
+      `   Pertanyaan: ${stringifyParam(question.prompt)}`,
+      options ? `   Opsi:\n${options}` : "",
+      question.rubric ? `   Rubrik/Jawaban: ${stringifyParam(question.rubric)}` : "",
+    ].filter(Boolean).join("\n");
+  });
+  return [intro, "", ...rendered].join("\n");
+}
+
+async function generateQuestionDrafts(baseUrl: string, apiKey: string, model: string, messages: ChatMessage[], plan: PlannedAction) {
+  const params = plan.params ?? {};
+  const draftPrompt: ChatMessage = {
+    role: "system",
+    content: `Kamu adalah perancang soal MORFOSCHOOLS. Balas HANYA JSON valid: {"questions":[...],"note":"..."}. Buat 3 draft soal yang pedagogis, jelas, sesuai konteks guru. Setiap question harus siap untuk POST /api/v1/exams/{examId}/questions: questionType, prompt, position, points, options, rubric. Untuk multiple_choice buat 4 opsi id a/b/c/d dan tepat satu isCorrect=true. Untuk essay options=[] dan rubric berisi kunci/rubrik. Jika includeStimulus=true atau user minta stimulus, masukkan stimulus singkat di awal prompt soal. Jangan mengarang examId.`,
+  };
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [draftPrompt, ...messages, { role: "user", content: `Parameter draft soal: ${JSON.stringify(params)}` }],
+      temperature: 0.5,
+      stream: false,
+    }),
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`question_draft_failed_${response.status}: ${raw.slice(0, 300)}`);
+  const parsed = JSON.parse(raw) as { choices?: Array<{ message?: { content?: string } }> };
+  const content = parsed.choices?.[0]?.message?.content?.trim() ?? "{}";
+  const jsonText = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+  const result = JSON.parse(jsonText) as { questions?: Array<Record<string, unknown>>; note?: string };
+  return Array.isArray(result.questions) ? result.questions.slice(0, 5) : [];
+}
+
+function normalizeQuestionPayload(question: Record<string, unknown>, position: number) {
+  const questionType = stringifyParam(question.questionType, "multiple_choice");
+  const payload: Record<string, unknown> = {
+    questionType,
+    prompt: stringifyParam(question.prompt),
+    position: typeof question.position === "number" ? question.position : position,
+    points: typeof question.points === "number" ? question.points : 10,
+    options: Array.isArray(question.options) ? question.options : [],
+    rubric: typeof question.rubric === "string" ? question.rubric : "",
+  };
+  return payload;
+}
+
+async function runPlannedAction(plan: PlannedAction, session: AiSession, backendBaseUrl: string, aiConfig?: { baseUrl: string; apiKey: string; model: string }, messages: ChatMessage[] = []) {
   const headers = backendHeaders(session);
   if (!headers) return "Aku butuh session login browser yang valid untuk mengakses backend. Silakan login ulang, lalu coba lagi.";
 
@@ -328,7 +424,29 @@ Sekarang aku bisa lanjut membuat kelas dengan guru tersebut sebagai wali kelas.`
     const body = { status: "draft", securityMode: "standard", ...(plan.params ?? {}) } as Record<string, unknown>;
     if (!body.title || !body.subjectName || !body.durationMinutes) return "Aku bisa membuat exam, tapi masih butuh judul ujian, mata pelajaran, dan durasi ujian.";
     const created = await readBackendJson(`${backendBaseUrl}/api/v1/exams`, { method: "POST", headers, body: JSON.stringify(body) });
-    return summarizeCreated("Exam", created as Record<string, unknown>);
+    const summary = summarizeCreated("Exam", created as Record<string, unknown>);
+    return `${summary}\n\nMau aku bantu susun draft soal untuk exam ini? Sebutkan topik/kompetensi dan tipe soal yang diinginkan, atau bilang misalnya: “buatkan 3 soal pilihan ganda dengan stimulus untuk exam ini”.`;
+  }
+
+  if (plan.action === "propose_questions" || plan.action === "revise_question_draft") {
+    if (!aiConfig) return "Aku bisa bantu menyusun soal, tapi konfigurasi AI belum tersedia.";
+    const questions = await generateQuestionDrafts(aiConfig.baseUrl, aiConfig.apiKey, aiConfig.model, messages, plan);
+    const intro = plan.action === "revise_question_draft"
+      ? "Sudah aku revisi draft soalnya. Pilih A/B/C atau 1/2/3 yang ingin dimasukkan ke exam, atau minta revisi lagi."
+      : "Aku bantu susun beberapa opsi soal beserta jawabannya. Pilih A/B/C atau 1/2/3 yang ingin dimasukkan ke exam, atau minta revisi/stimulus tambahan.";
+    return formatQuestionDrafts(questions, intro);
+  }
+
+  if (plan.action === "add_selected_questions") {
+    if (!plan.examId) return "Aku perlu tahu exam mana yang akan menerima soal pilihan itu. Sebutkan nama/ID exam-nya.";
+    const questions = Array.isArray(plan.questions) ? plan.questions : [];
+    if (questions.length === 0) return "Aku belum bisa menemukan soal pilihan yang dimaksud dari percakapan. Sebutkan pilihannya lagi, misalnya: masukkan soal A dan C.";
+    const created = [];
+    for (let index = 0; index < questions.length; index += 1) {
+      const body = normalizeQuestionPayload(questions[index], index + 1);
+      created.push(await readBackendJson(`${backendBaseUrl}/api/v1/exams/${encodeURIComponent(plan.examId)}/questions`, { method: "POST", headers, body: JSON.stringify(body) }));
+    }
+    return `Berhasil memasukkan ${created.length} soal ke exam ${plan.examId}.\n\n${created.map((item, index) => summarizeCreated(`Soal ${index + 1}`, item as Record<string, unknown>)).join("\n\n")}`;
   }
 
   if (plan.action === "add_question") {
@@ -445,7 +563,7 @@ export async function POST(request: Request) {
       if (!plan.action || plan.action === "none") {
         plan.action = detectedIntent;
       }
-      const actionResult = await runPlannedAction(plan, session, backendBaseUrl);
+      const actionResult = await runPlannedAction(plan, session, backendBaseUrl, { baseUrl, apiKey, model }, messages);
       if (actionResult) {
         return NextResponse.json({ message: { role: "assistant", content: actionResult }, model: "morfoschools-backend" });
       }

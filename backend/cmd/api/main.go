@@ -9,6 +9,7 @@ import (
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
 	"github.com/bayuw101/morfoschools/internal/modules/identity"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
+	"github.com/bayuw101/morfoschools/internal/platform/authctx"
 	"github.com/bayuw101/morfoschools/internal/platform/config"
 	"github.com/bayuw101/morfoschools/internal/platform/db"
 	httpserver "github.com/bayuw101/morfoschools/internal/platform/http"
@@ -44,7 +45,7 @@ func main() {
 		startSubmissionRelay(context.Background(), cfg.NATSURL, examRepo)
 	}
 
-	server := tenantctx.Middleware(withCORS(mux))
+	server := authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
 	log.Printf("api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, server); err != nil {
 		log.Fatalf("api server failed: %v", err)
@@ -83,7 +84,7 @@ func startSubmissionRelay(ctx context.Context, natsURL string, repo exams.Postgr
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, X-User-ID, X-User-Role, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

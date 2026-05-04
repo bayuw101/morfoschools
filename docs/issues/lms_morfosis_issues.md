@@ -43,6 +43,7 @@
 *   UI & API untuk pendaftaran Tenant (Sekolah).
 *   Role Management (Admin, Guru, Murid).
 *   Backend note: Added identity foundation endpoints with TDD: `GET /api/v1/users` and `POST /api/v1/users` require tenant context, validate email/name/role, upsert global users, and assign tenant membership via `tenant_users`.
+*   Backend note: Added lightweight auth context + role guard middleware using `X-User-ID` and `X-User-Role` headers for development/internal route protection until real session/JWT tokens are implemented.
 
 ### ISSUE-004.1: Fancy Right-Pulled Form Modals
 *   Create/Edit Tenant dan Create/Edit User harus pindah dari inline form ke modal drawer modern yang muncul dari kanan.

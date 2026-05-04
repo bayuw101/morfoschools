@@ -91,7 +91,7 @@ Start small with tenancy + health.
 - [x] `GET /api/v1/users` lists tenant-scoped users
 - [x] `POST /api/v1/users` creates or updates a global user and tenant membership role
 - [ ] authentication/session tokens
-- [ ] role authorization middleware
+- [x] role authorization middleware
 
 ## Verification
 
@@ -113,3 +113,4 @@ Start small with tenancy + health.
 - 2026-05-04: Added tenant-scoped receipt verification endpoint. `GET /api/v1/receipts/{receipt_id}` returns accepted receipt metadata, submission kind, received timestamp, and relay status so students/operators can verify proof-of-submission independently from async grading/relay state.
 - 2026-05-04: Completed first asynchronous NATS JetStream relay. Backend now connects to `NATS_URL`, auto-creates the file-backed `MORFOSIS_EXAM_SUBMISSIONS` stream if missing, polls unrelayed inbox rows, prioritizes `final_submit` before `autosave`, publishes events to `morfosis.exam.submissions.{kind}`, then marks rows relayed only after successful publish.
 - 2026-05-04: Started BE-3 identity foundation. Added TDD coverage and implementation for `GET /api/v1/users` and `POST /api/v1/users`, with tenant context required, email/name/role validation, global `users` upsert, and tenant membership role assignment through `tenant_users`.
+- 2026-05-04: Added lightweight auth context and role authorization middleware. `authctx.Middleware` reads `X-User-ID`/`X-User-Role`, stores the authenticated user in request context, and `RequireRoles(...)` returns `401 user_required` or `403 role_forbidden` for protected routes. This is a temporary boundary until proper session/JWT tokens are implemented.

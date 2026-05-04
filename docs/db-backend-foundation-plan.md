@@ -130,6 +130,14 @@ Start small with tenancy + health.
 - [x] `GET /api/v1/exams/{exam_id}/prerequisites` lists prerequisite rules
 - [x] `POST /api/v1/exams/{exam_id}/prerequisites` creates course/exam completion prerequisites
 
+## Phase BE-7 — Eligibility Materialization
+
+- [x] `GET /api/v1/exams/{exam_id}/eligibility` lists materialized eligibility rows from `exam_eligible_students`
+- [x] `POST /api/v1/exams/{exam_id}/eligibility/recalculate` recalculates tenant-scoped target students from class/group/student target rules
+- [x] Course completion prerequisites use `course_progress_events` evidence, keeping Google/YouTube outside the exam critical path
+- [x] Exam completion prerequisites use existing `exam_attempts` completion/submission state
+- [x] Runtime exam access remains designed to read `exam_eligible_students`, not join targets/prerequisites during spikes
+
 ## Verification
 
 - [x] `docker compose config`
@@ -155,3 +163,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed subject group membership backend. Added `subject_groups` and `subject_group_members` migration plus TDD-covered APIs for flexible cross-class academic groups and student membership, enabling lintas minat/remedial/enrichment targeting without changing administrative class enrollment.
 - 2026-05-04: Completed BE-5 course foundation. Added `courses`, `course_modules`, `course_resources`, and `course_progress_events` migration plus TDD-covered APIs for course/module/resource management and progress evidence events. Resources store metadata/external URLs only so Google Drive/YouTube remain outside LMS critical path.
 - 2026-05-04: Completed BE-6 exam management foundation. Added `exam_questions`, `exam_targets`, `exam_gate_windows`, and `exam_prerequisites` migration plus TDD-covered APIs for exam profiles, authoring, target rules, gate scheduling, and prerequisite rules. Ingestion endpoints remain routed through the same `/api/v1/exams/.../attempts/...` path for the exam critical path.
+- 2026-05-04: Completed BE-7 eligibility materialization API. Added TDD-covered `GET /api/v1/exams/{exam_id}/eligibility` and `POST /api/v1/exams/{exam_id}/eligibility/recalculate`, using exam targets + prerequisites to materialize `exam_eligible_students` before runtime exam spikes.

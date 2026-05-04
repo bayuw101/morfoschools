@@ -125,6 +125,7 @@
 *   Validasi akses Exam berdasarkan status Course Completion atau Exam sebelumnya.
 *   Implementation note: Added `/app/exams/[id]` Eligibility Preview in Exam Manager. Teachers can simulate materialized eligibility from selected course/exam prerequisites, see eligible vs blocked counts, inspect per-student blocking reasons, and trigger a recalculation preview toast.
 *   Architecture note: Runtime exam access should read from `exam_eligible_students` materialized at publish/recalculate time, not perform high-cardinality prerequisite joins during exam spikes.
+*   Backend note: Added eligibility materialization APIs with TDD: `GET /api/v1/exams/{exam_id}/eligibility` lists precomputed rows, and `POST /api/v1/exams/{exam_id}/eligibility/recalculate` expands class/subject-group/student targets, checks course/exam prerequisites, and updates `exam_eligible_students` before peak exam traffic.
 
 ### ISSUE-012: Resilient Exam Client (Offline-First)
 *   Exam Interface (Modern UI, timer, question navigation).

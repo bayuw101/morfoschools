@@ -168,6 +168,7 @@
 *   Load test: Simulasi 500-1000 murid submit serentak pada VPS 2GB.
 *   Fix bottlenecks di level DB index atau connection pooling.
 *   Implementation note: Added `/app/exams/[id]/performance` Exam Load Test Lab review surface with 500/1000/offline-replay scenarios, simulated receipt p95, inbox queue peak, DB CPU, worker lag, bottleneck checklist, pass criteria, and navigation links from Exam Directory and Exam Manager.
+*   Backend note: Added `backend/seeds/demo.sql` plus `backend/scripts/smoke_demo.sh` so Phase 1 backend review can start from deterministic local demo tenant/course/exam/eligibility/manual-grading data instead of manual UUID setup.
 
 ## Issue Documentation Protocol
 *   Jika selama implementasi ditemukan pekerjaan baru di luar scope issue yang sudah ada, **jangan hapus atau rewrite issue lama**.

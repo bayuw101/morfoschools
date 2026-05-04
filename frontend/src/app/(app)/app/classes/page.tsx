@@ -13,12 +13,13 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
-import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { DirectoryTableSkeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { fetchApi } from "@/lib/api-client";
 import {
+  buildTeacherOptions,
   calculateClassMetrics,
   filterClasses,
   filterStudentsForEnrollment,
@@ -63,7 +64,7 @@ const initialClassSections: ClassSection[] = [
 ];
 
 const gradeOptions = ["7", "8", "9", "10", "11", "12"].map((grade) => ({ label: `Kelas ${grade}`, value: grade }));
-const teacherOptions = ["Bu Rani Wulandari", "Pak Arif Setiawan", "Bu Maya Kartika", "Pak Dimas Nugroho"].map((teacher) => ({ label: teacher, value: teacher }));
+const fallbackTeacherNames = ["Ibu Ratna Biologi", "Bu Rani Wulandari", "Pak Arif Setiawan", "Bu Maya Kartika", "Pak Dimas Nugroho"];
 
 export default function ClassesPage() {
   const [classes, setClasses] = React.useState<ClassSection[]>([]);
@@ -84,7 +85,8 @@ export default function ClassesPage() {
   const [query, setQuery] = React.useState("");
   const [studentQuery, setStudentQuery] = React.useState("");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ClassSectionForm>({ resolver: zodResolver(classSectionSchema), defaultValues: emptyClassSection });
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<ClassSectionForm>({ resolver: zodResolver(classSectionSchema), defaultValues: emptyClassSection });
+  const teacherOptions = React.useMemo(() => buildTeacherOptions(classes, fallbackTeacherNames), [classes]);
 
   function toast(title: string, description: string, tone: ToastItem["tone"] = "success") {
     setToasts((current) => [...current, { id: crypto.randomUUID(), title, description, tone }]);
@@ -220,7 +222,11 @@ const method = editingClass ? "PATCH" : "POST";
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingClasses ? (
-            <TableSkeleton rows={4} columns={3} />
+            <DirectoryTableSkeleton
+              rows={4}
+              kind="classes"
+              className="md:grid-cols-[1fr_0.7fr_1fr_0.6fr_auto]"
+            />
           ) : filteredClasses.length > 0 ? filteredClasses.map((item) => (
             <div key={item.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_0.7fr_1fr_0.6fr_auto] md:items-center">
               <div>
@@ -262,10 +268,10 @@ const method = editingClass ? "PATCH" : "POST";
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <InputGroup title="Class Profile" description="Identitas rombongan belajar administratif.">
             <InputGroupItem span="full"><FloatingInput label="Nama Class Section" prefix={<School className="h-4 w-4" />} placeholder="10-A" {...register("name")} error={errors.name?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Grade Level" startAdornment={<GraduationCap className="h-4 w-4" />} options={gradeOptions} {...register("gradeLevel")} error={errors.gradeLevel?.message} /></InputGroupItem>
+            <InputGroupItem span="half"><FloatingSelect label="Grade Level" startAdornment={<GraduationCap className="h-4 w-4" />} options={gradeOptions} {...register("gradeLevel")} value={watch("gradeLevel")} onChange={(event) => setValue("gradeLevel", event.target.value, { shouldDirty: true, shouldValidate: true })} error={errors.gradeLevel?.message} /></InputGroupItem>
             <InputGroupItem span="half"><FloatingInput label="Tahun Ajaran" prefix={<CalendarDays className="h-4 w-4" />} placeholder="2025/2026" {...register("academicYear")} error={errors.academicYear?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Wali Kelas" startAdornment={<BookUser className="h-4 w-4" />} options={teacherOptions} {...register("homeroomTeacher")} error={errors.homeroomTeacher?.message} /></InputGroupItem>
-            <InputGroupItem span="half"><FloatingSelect label="Status" options={[{ label: "Active", value: "active" }, { label: "Inactive", value: "inactive" }]} {...register("status")} error={errors.status?.message} /></InputGroupItem>
+            <InputGroupItem span="half"><FloatingSelect label="Wali Kelas" startAdornment={<BookUser className="h-4 w-4" />} options={teacherOptions} {...register("homeroomTeacher")} value={watch("homeroomTeacher")} onChange={(event) => setValue("homeroomTeacher", event.target.value, { shouldDirty: true, shouldValidate: true })} error={errors.homeroomTeacher?.message} /></InputGroupItem>
+            <InputGroupItem span="half"><FloatingSelect label="Status" options={[{ label: "Active", value: "active" }, { label: "Inactive", value: "inactive" }]} {...register("status")} value={watch("status")} onChange={(event) => setValue("status", event.target.value as ClassSectionForm["status"], { shouldDirty: true, shouldValidate: true })} error={errors.status?.message} /></InputGroupItem>
           </InputGroup>
         </form>
       </RightPullSheet>

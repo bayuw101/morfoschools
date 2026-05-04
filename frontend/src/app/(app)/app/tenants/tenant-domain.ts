@@ -110,3 +110,18 @@ export function sortTenantsByOperationalPriority(
     return left.name.localeCompare(right.name);
   });
 }
+
+
+export type SelectOption = { label: string; value: string };
+
+export function buildOptionsIncludingCurrent(
+  baseOptions: SelectOption[],
+  currentValue: string,
+): SelectOption[] {
+  const normalizedValue = currentValue.trim();
+  if (!normalizedValue || baseOptions.some((option) => option.value === normalizedValue)) {
+    return baseOptions;
+  }
+
+  return [{ label: normalizedValue, value: normalizedValue }, ...baseOptions];
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildOptionsIncludingCurrent,
   calculateTenantMetrics,
   filterTenants,
   getTenantHealth,
@@ -90,5 +91,25 @@ describe("sortTenantsByOperationalPriority", () => {
       "tenant-sma-nusantara",
       "tenant-jakarta-overload",
     ]);
+  });
+});
+
+
+describe("buildOptionsIncludingCurrent", () => {
+  it("prepends a persisted backend value that is not part of the curated select list", () => {
+    expect(
+      buildOptionsIncludingCurrent(
+        [{ label: "DKI Jakarta", value: "DKI Jakarta" }],
+        "Sumatera Barat",
+      ),
+    ).toEqual([
+      { label: "Sumatera Barat", value: "Sumatera Barat" },
+      { label: "DKI Jakarta", value: "DKI Jakarta" },
+    ]);
+  });
+
+  it("keeps base options unchanged when the current value already exists", () => {
+    const options = [{ label: "Standard", value: "Standard" }];
+    expect(buildOptionsIncludingCurrent(options, "Standard")).toBe(options);
   });
 });

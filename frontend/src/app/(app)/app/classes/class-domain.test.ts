@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildTeacherOptions,
   calculateClassMetrics,
   filterClasses,
   filterStudentsForEnrollment,
@@ -81,5 +82,27 @@ describe("hasDuplicateClassSection", () => {
     expect(hasDuplicateClassSection(classes, { name: "10-a", academicYear: "2025/2026" })).toBe(true);
     expect(hasDuplicateClassSection(classes, { name: "10-a", academicYear: "2025/2026", ignoreId: "cls-10a" })).toBe(false);
     expect(hasDuplicateClassSection(classes, { name: "10-a", academicYear: "2024/2025" })).toBe(false);
+  });
+});
+
+
+describe("buildTeacherOptions", () => {
+  it("includes backend homeroom teachers so edit select can display persisted values", () => {
+    expect(
+      buildTeacherOptions(classes, ["Bu Rani Wulandari", "Pak Dimas Nugroho"]).map((option) => option.value),
+    ).toEqual(["Bu Rani Wulandari", "Pak Dimas Nugroho", "Pak Arif Setiawan", "Bu Maya Kartika"]);
+  });
+
+  it("deduplicates blank and repeated teacher names", () => {
+    expect(
+      buildTeacherOptions(
+        [
+          ...classes,
+          { id: "cls-empty", name: "10-Z", gradeLevel: "10", academicYear: "2025/2026", homeroomTeacher: " ", status: "active", studentIds: [] },
+          { id: "cls-repeat", name: "10-Y", gradeLevel: "10", academicYear: "2025/2026", homeroomTeacher: "Bu Rani Wulandari", status: "active", studentIds: [] },
+        ],
+        ["Bu Rani Wulandari"],
+      ).filter((option) => option.value === "Bu Rani Wulandari"),
+    ).toHaveLength(1);
   });
 });

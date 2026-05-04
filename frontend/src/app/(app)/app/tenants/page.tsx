@@ -23,11 +23,12 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
-import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { DirectoryTableSkeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { fetchApi } from "@/lib/api-client";
 import {
+  buildOptionsIncludingCurrent,
   calculateTenantMetrics,
   filterTenants,
   getTenantHealth,
@@ -80,6 +81,20 @@ const emptyTenant: TenantForm = {
   studentCap: 500,
 };
 
+const baseProvinceOptions = [
+  { label: "Indonesia", value: "Indonesia" },
+  { label: "Jawa Barat", value: "Jawa Barat" },
+  { label: "Jawa Tengah", value: "Jawa Tengah" },
+  { label: "DI Yogyakarta", value: "DI Yogyakarta" },
+  { label: "DKI Jakarta", value: "DKI Jakarta" },
+];
+
+const basePlanOptions = [
+  { label: "Low Spec VPS", value: "Low Spec VPS" },
+  { label: "Standard", value: "Standard" },
+  { label: "Large School", value: "Large School" },
+];
+
 export default function TenantsPage() {
   const [tenants, setTenants] = React.useState<Tenant[]>([]);
   const [loadingTenants, setLoadingTenants] = React.useState(true);
@@ -105,6 +120,8 @@ export default function TenantsPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = form;
 
@@ -226,7 +243,11 @@ export default function TenantsPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingTenants ? (
-            <TableSkeleton rows={4} columns={3} />
+            <DirectoryTableSkeleton
+              rows={4}
+              kind="tenants"
+              className="md:grid-cols-[1.4fr_0.9fr_0.7fr_0.5fr_auto]"
+            />
           ) : filteredTenants.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada tenant yang cocok.
@@ -320,13 +341,10 @@ export default function TenantsPage() {
               <FloatingSelect
                 label="Provinsi"
                 startAdornment={<MapPin className="h-4 w-4" />}
-                options={[
-                  { label: "Jawa Barat", value: "Jawa Barat" },
-                  { label: "Jawa Tengah", value: "Jawa Tengah" },
-                  { label: "DI Yogyakarta", value: "DI Yogyakarta" },
-                  { label: "DKI Jakarta", value: "DKI Jakarta" },
-                ]}
+                options={buildOptionsIncludingCurrent(baseProvinceOptions, watch("province"))}
                 {...register("province")}
+                value={watch("province")}
+                onChange={(event) => setValue("province", event.target.value, { shouldDirty: true, shouldValidate: true })}
                 error={errors.province?.message}
               />
             </InputGroupItem>
@@ -334,12 +352,10 @@ export default function TenantsPage() {
               <FloatingSelect
                 label="Plan"
                 startAdornment={<Server className="h-4 w-4" />}
-                options={[
-                  { label: "Low Spec VPS", value: "Low Spec VPS" },
-                  { label: "Standard", value: "Standard" },
-                  { label: "Large School", value: "Large School" },
-                ]}
+                options={buildOptionsIncludingCurrent(basePlanOptions, watch("plan"))}
                 {...register("plan")}
+                value={watch("plan")}
+                onChange={(event) => setValue("plan", event.target.value, { shouldDirty: true, shouldValidate: true })}
                 error={errors.plan?.message}
               />
             </InputGroupItem>

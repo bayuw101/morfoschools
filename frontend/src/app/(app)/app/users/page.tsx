@@ -24,7 +24,7 @@ import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
-import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
+import { DirectoryTableSkeleton, MetricCardSkeleton } from "@/components/ui/skeleton";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { fetchApi } from "@/lib/api-client";
 import { getSession } from "@/lib/auth";
@@ -221,6 +221,13 @@ export default function UsersPage() {
         headers: { "X-Tenant-ID": values.tenantId },
         body: JSON.stringify({ name: values.name, email: values.email, role: values.role }),
       });
+
+      if (editingUser && editingUser.tenantId !== values.tenantId) {
+        await fetchApi(`/api/v1/users/${editingUser.id}`, {
+          method: "DELETE",
+          headers: { "X-Tenant-ID": editingUser.tenantId },
+        });
+      }
       const hydratedUser: User = {
         ...mapApiUser(savedUser, { label: tenantName, value: values.tenantId }, tenantOptions),
         tenantId: values.tenantId,
@@ -242,7 +249,10 @@ export default function UsersPage() {
 
   function deactivateUser() {
     if (!confirmUser) return;
-    fetchApi(`/api/v1/users/${confirmUser.id}`, { method: "DELETE" })
+    fetchApi(`/api/v1/users/${confirmUser.id}`, {
+      method: "DELETE",
+      headers: { "X-Tenant-ID": confirmUser.tenantId },
+    })
       .then(() => {
         setUsers((current) => current.filter((item) => item.id !== confirmUser.id));
         toast("User dihapus", `${confirmUser.name} telah dihapus.`);
@@ -317,7 +327,11 @@ export default function UsersPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingUsers ? (
-            <TableSkeleton rows={4} columns={5} />
+            <DirectoryTableSkeleton
+              rows={4}
+              kind="users"
+              className="md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto]"
+            />
           ) : filteredUsers.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada user untuk tenant ini.

@@ -126,3 +126,23 @@ export function hasDuplicateClassSection(
       item.academicYear === params.academicYear,
   );
 }
+
+
+export type SelectOption = { label: string; value: string };
+
+export function buildUniqueOptions(values: string[]): SelectOption[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).map((value) => ({
+    label: value,
+    value,
+  }));
+}
+
+export function buildTeacherOptions(
+  classes: ClassSectionRecord[],
+  fallbackTeacherNames: string[],
+): SelectOption[] {
+  return buildUniqueOptions([
+    ...fallbackTeacherNames,
+    ...classes.map((item) => item.homeroomTeacher),
+  ]);
+}

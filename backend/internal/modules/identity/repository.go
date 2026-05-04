@@ -75,9 +75,11 @@ WITH update_user AS (
     WHERE id = $3
     RETURNING id, email::text, name, status
 ), membership AS (
-    UPDATE tenant_users 
-    SET role = $4
-    WHERE tenant_id = $5 AND user_id = $3
+    INSERT INTO tenant_users (tenant_id, user_id, role)
+    SELECT $5, id, $4
+    FROM update_user
+    ON CONFLICT (tenant_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role
 )
 SELECT id::text, email::text, name, $4 AS role, status
 FROM update_user

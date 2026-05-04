@@ -23,6 +23,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { createExamApiClient, resolveExamRuntimeIds } from "@/lib/exam-api";
 import { initialExams } from "../../exams/data";
 import {
   formatGateDateTime,
@@ -36,8 +37,12 @@ export default function ExamGatePage() {
   const router = useRouter();
   const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
   const gate = exam.gateRules[0];
+  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const api = React.useMemo(() => createExamApiClient(), []);
   const [password, setPassword] = React.useState("");
   const [acceptedRules, setAcceptedRules] = React.useState(false);
+  const [serverChecking, setServerChecking] = React.useState(false);
+  const [serverReasons, setServerReasons] = React.useState<string[]>([]);
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
 
   const requiresPassword = Boolean(gate?.passwordEnabled);
@@ -55,7 +60,7 @@ export default function ExamGatePage() {
     ]);
   }
 
-  function enterExam() {
+  async function enterExam() {
     if (!acceptedRules) {
       toast("Rules belum disetujui", "Centang persetujuan rules sebelum masuk exam.", "warning");
       return;
@@ -64,7 +69,26 @@ export default function ExamGatePage() {
       toast("Password salah", "Minta password gate ke guru/pengawas ujian.", "error");
       return;
     }
-    router.push(`/app/take-exam/${exam.id}`);
+    setServerChecking(true);
+    setServerReasons([]);
+    try {
+      const decision = await api.checkGate(runtime, password);
+      if (!decision.allowed) {
+        setServerReasons(decision.reasons);
+        toast("Gate server menolak", decision.reasons.join(", ") || "Eligibility belum terpenuhi.", "error");
+        return;
+      }
+      if (decision.gateToken) {
+        window.sessionStorage.setItem(`exam_gate_token_${exam.id}`, decision.gateToken);
+      }
+      router.push(`/app/take-exam/${exam.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "gate_check_failed";
+      setServerReasons([message]);
+      toast("Gate server belum siap", "Pastikan backend dan seed demo sudah aktif, lalu coba lagi.", "error");
+    } finally {
+      setServerChecking(false);
+    }
   }
 
   return (
@@ -197,8 +221,12 @@ export default function ExamGatePage() {
               <p>• Password: {requiresPassword ? (passwordValid ? "valid" : "dibutuhkan") : "tidak diperlukan"}</p>
             </div>
 
-            <Button className="mt-5 w-full" onClick={enterExam} disabled={!canEnter}>
-              <DoorOpen className="h-4 w-4" /> Enter Exam
+            {serverReasons.length ? (
+              <Alert tone="warning" title="Server gate response" description={serverReasons.join(", ")} />
+            ) : null}
+
+            <Button className="mt-5 w-full" onClick={enterExam} disabled={!canEnter || serverChecking}>
+              <DoorOpen className="h-4 w-4" /> {serverChecking ? "Checking Server Gate..." : "Enter Exam"}
             </Button>
           </Panel>
 

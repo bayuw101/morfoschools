@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamResultReadModel } from "@/lib/exam-api";
 import { initialExams } from "../../exams/data";
 import {
   calculateMultipleChoiceScore,
@@ -31,7 +32,11 @@ export default function ExamResultPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
-  const receipt = searchParams.get("receipt") ?? `RCT-${exam.id.toUpperCase()}`;
+  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id, { attemptId: searchParams.get("attempt") ?? undefined }), [exam.id, searchParams]);
+  const api = React.useMemo(() => createExamApiClient(), []);
+  const [serverResult, setServerResult] = React.useState<ExamResultReadModel | null>(null);
+  const [resultError, setResultError] = React.useState("");
+  const receipt = serverResult?.receipt?.receiptId ?? searchParams.get("receipt") ?? `RCT-${exam.id.toUpperCase()}`;
   const answers = decodeAnswers(searchParams.get("answers"));
   const allMultipleChoice = exam.questions.every((question) => question.type === "multiple_choice");
   const teacherAllowsInstantScore = allMultipleChoice;
@@ -39,6 +44,22 @@ export default function ExamResultPage() {
   const feedback = getFeedbackVisibility({ allAutoGradable: allMultipleChoice, teacherAllowsInstantScore });
   const sections = groupResultSections(exam.questions);
   const answeredCount = exam.questions.filter((question) => Boolean(answers[question.id])).length;
+  const gradingStatus = serverResult?.grading?.status ?? (teacherAllowsInstantScore ? "completed" : "waiting_for_grading");
+  const serverScore = serverResult?.grading && serverResult.grading.maxScore > 0
+    ? Math.round((serverResult.grading.finalScore / serverResult.grading.maxScore) * 100)
+    : undefined;
+
+  React.useEffect(() => {
+    api
+      .getResult(runtime)
+      .then((result) => {
+        setServerResult(result);
+        setResultError("");
+      })
+      .catch((error) => {
+        setResultError(error instanceof Error ? error.message : "result_lookup_failed");
+      });
+  }, [api, runtime]);
 
   return (
     <SecureExamShell title={exam.title} subtitle="Receipt submit dan ringkasan hasil ujian." mode="receipt" receipt allowUnsecure={exam.securityMode === "unsecure_allowed"}>
@@ -69,12 +90,15 @@ export default function ExamResultPage() {
       <div className="grid gap-5 md:grid-cols-4">
         <MetricCard label="Receipt" value="Issued" detail="Digital receipt tersedia" icon={FileCheck2} />
         <MetricCard label="Answered" value={`${answeredCount}/${exam.questions.length}`} detail="Jawaban diterima" icon={ClipboardCheck} />
-        <MetricCard label="Grading" value={teacherAllowsInstantScore ? "Instant" : "Pending"} detail={teacherAllowsInstantScore ? "MC auto-calculate" : "Menunggu koreksi"} icon={Gauge} />
+        <MetricCard label="Grading" value={serverResult?.ready ? "Ready" : gradingStatus} detail={serverResult?.message ?? (teacherAllowsInstantScore ? "MC auto-calculate" : "Menunggu koreksi")} icon={Gauge} />
         <MetricCard label="Integrity" value="Stored" detail="Append-only inbox" icon={ShieldCheck} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
         <Panel className="p-5">
+          {resultError ? (
+            <Alert tone="warning" title="Result server belum terbaca" description={`${resultError}. Receipt query string tetap ditampilkan sebagai fallback.`} />
+          ) : null}
           <div className="mb-5 flex items-start gap-3">
             <div className="rounded-2xl bg-[color:var(--brand-soft)] p-3 text-[color:var(--brand)]">
               <FileCheck2 className="h-5 w-5" />
@@ -122,8 +146,10 @@ export default function ExamResultPage() {
                 </div>
               </div>
               <div className="rounded-[28px] bg-[color:var(--surface-subtle)] p-5 text-center">
-                <p className="font-display text-5xl font-bold tracking-tight text-[color:var(--foreground)]">{score.percentage}</p>
-                <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">{score.earned} / {score.totalPoints} points</p>
+                <p className="font-display text-5xl font-bold tracking-tight text-[color:var(--foreground)]">{serverScore ?? score.percentage}</p>
+                <p className="mt-1 text-sm text-[color:var(--muted-foreground)]">
+                  {serverResult?.grading ? `${serverResult.grading.finalScore} / ${serverResult.grading.maxScore}` : `${score.earned} / ${score.totalPoints}`} points
+                </p>
               </div>
               <Alert
                 tone="info"

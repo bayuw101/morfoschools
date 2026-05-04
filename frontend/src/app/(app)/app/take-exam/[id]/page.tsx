@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { TextareaField } from "@/components/ui/textarea-field";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { createExamApiClient, resolveExamRuntimeIds } from "@/lib/exam-api";
 import { initialExams } from "../../exams/data";
 import {
   calculateAnswerProgress,
@@ -37,6 +38,9 @@ export default function TakeExamPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
+  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const api = React.useMemo(() => createExamApiClient(), []);
+  const [gateToken, setGateToken] = React.useState("");
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [answers, setAnswers] = React.useState<Record<string, string>>({});
   const [secondsLeft, setSecondsLeft] = React.useState(90 * 60);
@@ -54,6 +58,10 @@ export default function TakeExamPage() {
   const autosave = getAutosaveState(isOnline, syncState === "saving");
   const timeWarning = getTimeWarning(secondsLeft);
   const submitReadiness = validateSubmitReadiness(exam.questions, answers, secondsLeft, syncState === "queued");
+
+  React.useEffect(() => {
+    setGateToken(window.sessionStorage.getItem(`exam_gate_token_${exam.id}`) ?? "");
+  }, [exam.id]);
 
   React.useEffect(() => {
     const interval = window.setInterval(() => {
@@ -74,11 +82,23 @@ export default function TakeExamPage() {
     if (!currentQuestion) return;
     setSyncState(isOnline ? "saving" : "queued");
     const timeout = window.setTimeout(() => {
-      setSyncState(isOnline ? "saved" : "queued");
-      setLastSavedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
+      if (!isOnline) {
+        setSyncState("queued");
+        return;
+      }
+      api
+        .autosave(runtime, answers, gateToken)
+        .then(() => {
+          setSyncState("saved");
+          setLastSavedAt(new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }));
+        })
+        .catch(() => {
+          setSyncState("queued");
+          toast("Autosave server gagal", "Jawaban tetap tersimpan di client dan akan dicoba lagi.", "warning");
+        });
     }, 650);
     return () => window.clearTimeout(timeout);
-  }, [answers, currentQuestion, isOnline]);
+  }, [answers, currentQuestion, isOnline, api, runtime, gateToken]);
 
   function toast(title: string, description: string, tone: ToastItem["tone"] = "success") {
     setToasts((current) => [
@@ -91,12 +111,18 @@ export default function TakeExamPage() {
     setAnswers((current) => updateAnswerState(current, questionId, value));
   }
 
-  function submitExam() {
-    const receipt = `RCT-${exam.id.toUpperCase()}-${Date.now().toString().slice(-6)}`;
-    setReceiptId(receipt);
-    setSyncState("saved");
-    const encodedAnswers = btoa(encodeURIComponent(JSON.stringify(answers)));
-    router.push(`/app/exam-result/${exam.id}?receipt=${receipt}&answers=${encodedAnswers}`);
+  async function submitExam() {
+    setSyncState("saving");
+    try {
+      const receipt = await api.submit(runtime, answers, gateToken);
+      setReceiptId(receipt.receiptId);
+      setSyncState("saved");
+      const encodedAnswers = btoa(encodeURIComponent(JSON.stringify(answers)));
+      router.push(`/app/exam-result/${exam.id}?receipt=${receipt.receiptId}&attempt=${runtime.attemptId}&answers=${encodedAnswers}`);
+    } catch {
+      setSyncState("queued");
+      toast("Submit server gagal", "Jawaban belum mendapat receipt server. Coba lagi saat koneksi stabil.", "error");
+    }
   }
 
   return (

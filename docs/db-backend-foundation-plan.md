@@ -91,7 +91,7 @@ Start small with tenancy + health.
 
 - [x] `GET /api/v1/users` lists tenant-scoped users
 - [x] `POST /api/v1/users` creates or updates a global user and tenant membership role
-- [ ] authentication/session tokens
+- [x] authentication/session tokens
 - [x] role authorization middleware
 
 ## Phase BE-4 — Academic Foundation
@@ -180,6 +180,19 @@ Start small with tenancy + health.
 - [x] Response includes latest receipts and latest security events so teachers can inspect submission flow and proctoring signals without touching external services
 - [x] Demo seed/smoke now includes a sample security event and monitor endpoint hint
 
+## Phase BE-14 — Authentication Foundation
+
+- [x] Migration `000010_auth_foundation` adds `password_hash` to `users` and creates `sessions` table with tenant-scoped token-based sessions
+- [x] `POST /api/v1/auth/login` authenticates user by email + bcrypt password, creates a session row, and returns a session token + user metadata
+- [x] `POST /api/v1/auth/logout` invalidates an active session token
+- [x] `GET /api/v1/auth/me` returns the authenticated user profile from a valid session token
+- [x] `SessionMiddleware` reads `Authorization: Bearer <token>` and injects `X-User-ID`/`X-User-Role` into request context, with transparent fallback to dev headers for backward compatibility
+- [x] Demo seed updated with bcrypt-hashed password `morfosis123` for all demo users
+- [x] Frontend `auth.ts` library: `storeSession`, `getSession`, `clearSession`, `isAuthenticated`, `createAuthApiClient`
+- [x] Frontend login page at `/login` with morfostocks-style design, demo account quick-pick, and real backend auth flow
+- [x] Frontend `exam-api.ts` updated to prefer `Authorization: Bearer` from stored session, with dev header fallback
+- [x] `UserButton` now reads real session data and sign-out clears session + redirects to login
+
 ## Verification
 
 - [x] `docker compose config`
@@ -212,3 +225,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-11 demo seed and smoke validation. Added idempotent local demo data plus deterministic smoke checks so the backend can be tried without hand-crafting UUID graph data.
 - 2026-05-04: Completed BE-12 result read API. Added tenant-scoped result endpoint combining receipt proof, relay status, attempt/grading state, auto/manual/final scores, question-level results, and pending/completed messages for the student result page.
 - 2026-05-04: Completed BE-13 teacher monitor API. Added tenant-scoped exam monitor endpoint with summary counts, ingestion lag, latest receipts, and security-event feed for teacher/admin dashboards.
+- 2026-05-04: Completed BE/FE-14 authentication foundation. Added bcrypt-backed login/logout/me endpoints, Postgres `sessions`, Bearer-token middleware with dev-header fallback, demo password hashes, frontend session storage/API client, `/login` page, Authorization-aware exam API calls, and real session display/logout in the user menu.

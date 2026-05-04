@@ -1,0 +1,120 @@
+// ── Auth session management & API client ────────────────────
+// Lightweight, no external deps. Works with localStorage (browser)
+// or any Storage-like object (tests).
+
+const SESSION_KEY = "morfoschools_session";
+
+// ── Types ───────────────────────────────────────────────────
+export type AuthSession = {
+  token: string;
+  userId: string;
+  email: string;
+  name: string;
+  role: string;
+  tenantId: string;
+  tenantName: string;
+  expiresAt: string; // ISO-8601
+};
+
+export type LoginCredentials = {
+  email: string;
+  password: string;
+  tenantId: string;
+};
+
+export type LoginResponse = AuthSession; // backend returns same shape
+
+// ── Storage-backed session helpers ──────────────────────────
+export type SessionStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+function defaultStorage(): SessionStorage | null {
+  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  return null;
+}
+
+export function storeSession(session: AuthSession, storage?: SessionStorage | null): void {
+  const s = storage ?? defaultStorage();
+  s?.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+export function getSession(storage?: SessionStorage | null): AuthSession | null {
+  const s = storage ?? defaultStorage();
+  const raw = s?.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthSession;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSession(storage?: SessionStorage | null): void {
+  const s = storage ?? defaultStorage();
+  s?.removeItem(SESSION_KEY);
+}
+
+export function isAuthenticated(storage?: SessionStorage | null): boolean {
+  const session = getSession(storage);
+  if (!session) return false;
+  return new Date(session.expiresAt) > new Date();
+}
+
+// ── Auth API client ─────────────────────────────────────────
+export type AuthApiClientOptions = {
+  baseUrl?: string;
+  fetcher?: typeof fetch;
+};
+
+export function createAuthApiClient(options: AuthApiClientOptions = {}) {
+  const baseUrl = (options.baseUrl ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "");
+  const fetcher = options.fetcher ?? fetch;
+
+  async function request<T>(path: string, init: RequestInit & { headers: Record<string, string> }): Promise<T> {
+    const response = await fetcher(`${baseUrl}${path}`, init);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = typeof payload?.error === "string" ? payload.error : `auth_request_failed_${response.status}`;
+      throw new Error(message);
+    }
+    return payload as T;
+  }
+
+  return {
+    login(creds: LoginCredentials) {
+      return request<LoginResponse>("/api/v1/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": creds.tenantId,
+        },
+        body: JSON.stringify({ email: creds.email, password: creds.password }),
+      });
+    },
+
+    me(token: string, tenantId: string) {
+      return request<{ userId: string; email: string; name: string; role: string }>("/api/v1/auth/me", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Tenant-ID": tenantId,
+        },
+      });
+    },
+
+    logout(token: string, tenantId: string) {
+      return request<{ ok: boolean }>("/api/v1/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Tenant-ID": tenantId,
+        },
+      });
+    },
+  };
+}

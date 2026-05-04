@@ -1,5 +1,5 @@
 -- Demo data for LMS Morfosis local evaluation.
--- Idempotent: safe to re-run after all migrations 000001-000009 are applied.
+-- Idempotent: safe to re-run after all migrations 000001-000010 are applied.
 
 BEGIN;
 
@@ -8,12 +8,13 @@ INSERT INTO tenants (id, name, slug, province, plan, status, student_cap)
 VALUES ('00000000-0000-4000-8000-000000000001', 'SMA Morfosis Demo', 'morfosis-demo-school', 'DKI Jakarta', 'Low Spec VPS', 'active', 500)
 ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name, status='active', updated_at=now();
 
-INSERT INTO users (id, email, name, status) VALUES
-('00000000-0000-4000-8000-000000000101', 'admin@morfosis.demo', 'Admin Demo', 'active'),
-('00000000-0000-4000-8000-000000000102', 'guru.biologi@morfosis.demo', 'Ibu Ratna Biologi', 'active'),
-('00000000-0000-4000-8000-000000000201', 'alya@morfosis.demo', 'Alya Putri', 'active'),
-('00000000-0000-4000-8000-000000000202', 'bima@morfosis.demo', 'Bima Pratama', 'active')
-ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, status='active', updated_at=now();
+-- password_hash = bcrypt('morfosis123') for all demo users
+INSERT INTO users (id, email, name, status, password_hash) VALUES
+('00000000-0000-4000-8000-000000000101', 'admin@morfosis.demo', 'Admin Demo', 'active', '$2a$10$B9x0K1HbCUn.61/DeZPVHeQwSA7moOJ2nWKACRPmZnLMK3Ozt9TRe'),
+('00000000-0000-4000-8000-000000000102', 'guru.biologi@morfosis.demo', 'Ibu Ratna Biologi', 'active', '$2a$10$B9x0K1HbCUn.61/DeZPVHeQwSA7moOJ2nWKACRPmZnLMK3Ozt9TRe'),
+('00000000-0000-4000-8000-000000000201', 'alya@morfosis.demo', 'Alya Putri', 'active', '$2a$10$B9x0K1HbCUn.61/DeZPVHeQwSA7moOJ2nWKACRPmZnLMK3Ozt9TRe'),
+('00000000-0000-4000-8000-000000000202', 'bima@morfosis.demo', 'Bima Pratama', 'active', '$2a$10$B9x0K1HbCUn.61/DeZPVHeQwSA7moOJ2nWKACRPmZnLMK3Ozt9TRe')
+ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, status='active', password_hash=EXCLUDED.password_hash, updated_at=now();
 
 INSERT INTO tenant_users (tenant_id, user_id, role) VALUES
 ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000101','admin'),

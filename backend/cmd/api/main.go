@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bayuw101/morfoschools/internal/modules/academic"
+	"github.com/bayuw101/morfoschools/internal/modules/auth"
 	"github.com/bayuw101/morfoschools/internal/modules/courses"
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
 	"github.com/bayuw101/morfoschools/internal/modules/identity"
@@ -39,6 +40,8 @@ func main() {
 	mux.Handle("/readyz", httpserver.NewRouter(dbPool))
 	if dbPool != nil {
 		pgxPool := dbPool.PgxPool()
+		authRepo := auth.NewPostgresRepository(pgxPool)
+		mux.Handle("/api/v1/auth/", auth.NewHandler(authRepo))
 		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
 		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
@@ -62,7 +65,13 @@ func main() {
 		startGradingWorker(backgroundCtx, examRepo)
 	}
 
-	server := authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
+	var server http.Handler
+	if dbPool != nil {
+		authRepo := auth.NewPostgresRepository(dbPool.PgxPool())
+		server = auth.SessionMiddleware(authRepo)(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
+	} else {
+		server = authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
+	}
 	log.Printf("api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, server); err != nil {
 		log.Fatalf("api server failed: %v", err)
@@ -124,7 +133,7 @@ func startGradingWorker(ctx context.Context, repo exams.PostgresSubmissionReposi
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, X-User-ID, X-User-Role, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Tenant-ID, X-User-ID, X-User-Role, X-Exam-Gate-Token, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

@@ -1,3 +1,5 @@
+import { getSession } from "./auth";
+
 export type ExamRuntimeIds = {
   tenantId: string;
   examId: string;
@@ -143,10 +145,17 @@ export function buildExamApiHeaders(identity: ExamApiIdentity): Record<string, s
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const tenantId = identity.tenantId.trim();
   if (tenantId) headers["X-Tenant-ID"] = tenantId;
-  const userId = identity.userId?.trim();
-  if (userId) headers["X-User-ID"] = userId;
-  const userRole = identity.userRole?.trim();
-  if (userRole) headers["X-User-Role"] = userRole;
+  // Prefer stored session token for Authorization header
+  const session = getSession();
+  if (session?.token) {
+    headers["Authorization"] = `Bearer ${session.token}`;
+  } else {
+    // Dev-mode fallback: use explicit identity headers
+    const userId = identity.userId?.trim();
+    if (userId) headers["X-User-ID"] = userId;
+    const userRole = identity.userRole?.trim();
+    if (userRole) headers["X-User-Role"] = userRole;
+  }
   const gateToken = identity.gateToken?.trim();
   if (gateToken) headers["X-Exam-Gate-Token"] = gateToken;
   return headers;

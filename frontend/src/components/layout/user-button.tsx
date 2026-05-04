@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, KeyRound, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { clearSession, getSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 
 function getInitials(label: string) {
@@ -10,11 +12,15 @@ function getInitials(label: string) {
 }
 
 export function UserButton() {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const resolvedName = "Guru Morfosis";
-  const resolvedHandle = "guru.morfosis";
-  const resolvedEmail = "guru@morfosis.local";
+  const session = getSession();
+  const resolvedName = session?.name ?? "Guru Morfosis";
+  const resolvedHandle = session?.email?.split("@")[0] ?? "guru.morfosis";
+  const resolvedEmail = session?.email ?? "guru@morfosis.local";
+  const resolvedRole = session?.role ?? "teacher";
+  const resolvedTenant = session?.tenantName ?? "SMP Morfosis Demo";
   const initials = getInitials(resolvedName);
 
   React.useEffect(() => {
@@ -48,14 +54,14 @@ export function UserButton() {
           <div className="rounded-[18px] border border-[color:var(--border)] bg-[color:var(--surface-subtle)] px-4 py-3">
             <p className="text-sm font-semibold text-[color:var(--foreground)]">{resolvedName}</p>
             <p className="mt-1 text-xs leading-5 text-[color:var(--muted-foreground)]">{resolvedEmail}</p>
-            <p className="mt-2 inline-flex rounded-full bg-[color:var(--brand-soft)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--brand-strong)]">Administrator Sekolah</p>
+            <p className="mt-2 inline-flex rounded-full bg-[color:var(--brand-soft)] px-2.5 py-1 text-[11px] font-semibold text-[color:var(--brand-strong)]">{resolvedRole}</p>
           </div>
 
           <div className="mt-2 space-y-1">
             {[
               { icon: UserRound, title: "Profile", desc: "@" + resolvedHandle },
-              { icon: ShieldCheck, title: "Session status", desc: "Mock session aktif untuk review UI." },
-              { icon: KeyRound, title: "Tenant", desc: "SMP Morfosis Demo" },
+              { icon: ShieldCheck, title: "Session status", desc: session ? "Authenticated via backend." : "Mock session." },
+              { icon: KeyRound, title: "Tenant", desc: resolvedTenant },
             ].map((item) => (
               <div key={item.title} className="flex items-start gap-3 rounded-[18px] px-3 py-3">
                 <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-[color:var(--brand-soft)] text-[color:var(--brand-strong)]"><item.icon className="h-4 w-4" /></div>
@@ -65,7 +71,7 @@ export function UserButton() {
           </div>
 
           <div className="mt-2 border-t border-[color:var(--border)] pt-2">
-            <button type="button" className="flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left text-[color:var(--danger)] transition-colors hover:bg-[color:var(--danger-soft)]">
+            <button type="button" onClick={() => { clearSession(); router.push("/login"); }} className="flex w-full items-center gap-3 rounded-[18px] px-3 py-3 text-left text-[color:var(--danger)] transition-colors hover:bg-[color:var(--danger-soft)]">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[color:var(--danger-soft)]"><LogOut className="h-4 w-4" /></div>
               <div><p className="text-sm font-semibold">Sign out</p><p className="mt-0.5 text-xs leading-5 text-[color:var(--muted-foreground)]">Kembali ke halaman login.</p></div>
             </button>

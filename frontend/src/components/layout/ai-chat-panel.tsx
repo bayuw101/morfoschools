@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AlertCircle, Bot, CheckCircle2, GraduationCap, Loader2, Paperclip, SendHorizontal, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getSession } from "@/lib/auth";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -10,9 +11,10 @@ type ChatMessage = {
 };
 
 const suggestions = [
-  "Buatkan ringkasan progres kelas 10-A",
-  "Cari siswa yang perlu remedial",
-  "Draft pengumuman ujian besok",
+  "/jadwal-ujian",
+  'Bantu siapkan /tambah-kelas {"name":"X-A","gradeLevel":"10","academicYear":"2025/2026","homeroomTeacher":"","status":"active","studentIds":[]}',
+  'Bantu siapkan /create-exam {"title":"UTS Matematika X","subjectName":"Matematika","status":"draft","durationMinutes":90,"securityMode":"standard"}',
+  'Bantu siapkan /add-question {examId} {"questionType":"multiple_choice","prompt":"...","position":1,"points":10,"options":[{"id":"a","text":"...","isCorrect":true}],"rubric":""}',
 ];
 
 const initialMessages: ChatMessage[] = [
@@ -48,7 +50,10 @@ export function AiChatPanel() {
       const response = await fetch("/api/ai-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          session: getSession(),
+        }),
       });
 
       const data = (await response.json().catch(() => null)) as { message?: ChatMessage; error?: string } | null;
@@ -72,8 +77,8 @@ export function AiChatPanel() {
   }
 
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-none border border-white/10 bg-[color:var(--shell)] text-white shadow-[0_28px_70px_rgba(0,0,0,0.38)] md:rounded-[30px]">
-      <div className="shrink-0 border-b border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] px-5 py-4">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-[color:var(--shell)] text-white shadow-[0_28px_70px_rgba(0,0,0,0.38)] md:rounded-[30px]">
+      <div className="shrink-0  px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-[#f5f7fb] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.24)]">
             <Bot className="h-5 w-5" />
@@ -81,7 +86,7 @@ export function AiChatPanel() {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-bold text-[#f5f7fb]">MORFOSCHOOLS AI</p>
-              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#cfe0ff]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#cfe0ff]">
                 <Sparkles className="h-3 w-3" /> Live
               </span>
             </div>
@@ -104,7 +109,7 @@ export function AiChatPanel() {
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 [scrollbar-color:rgba(255,255,255,0.22)_transparent]">
-        <div className="rounded-[24px] border border-white/10 bg-white/[0.06] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
+        <div className="rounded-[24px] bg-white/[0.06] p-4 shadow-[0_18px_38px_rgba(0,0,0,0.22)]">
           <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#9caeca]">
             <GraduationCap className="h-4 w-4" /> Suggested actions
           </div>
@@ -153,7 +158,7 @@ export function AiChatPanel() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="shrink-0 border-t border-white/10 bg-[color:var(--shell-elevated)] p-4">
+      <form onSubmit={handleSubmit} className="shrink-0  p-4">
         {error ? (
           <div className="mb-3 flex items-start gap-2 rounded-2xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-xs leading-5 text-red-100">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />

@@ -31,17 +31,30 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { TextareaField } from "@/components/ui/textarea-field";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import {
   calculateCourseMetrics,
   filterCourses,
   getCourseEmptyState,
   getCourseStatus,
+  mapBackendCourseToDirectory,
+  mapBackendModuleToCourseModule,
+  mapModuleTypeToResource,
   type AssignmentTargetRecord,
   type CourseDirectoryRecord,
   type CourseModuleRecord,
   type PrerequisiteTargetRecord,
 } from "./course-domain";
+import {
+  createCourseInApi,
+  deleteCourseInApi,
+  createModuleInApi,
+  createResourceInApi,
+  listCourseReferenceOptions,
+  listCoursesFromApi,
+  updateCourseInApi,
+} from "./course-api";
 
 const courseSchema = z.object({
   title: z.string().min(3, "Judul course minimal 3 karakter"),
@@ -85,7 +98,7 @@ const emptyModule: ModuleForm = {
 };
 
 const emptyAssignments: AssignmentTarget = {
-  subjectGroups: ["Matematika X - Pagi"],
+  subjectGroups: [],
   classSections: [],
   students: [],
 };
@@ -94,72 +107,6 @@ const emptyPrerequisites: PrerequisiteTarget = {
   courses: [],
   exams: [],
 };
-
-const initialCourses: Course[] = [
-  {
-    id: "course-algebra-x",
-    title: "Aljabar Linear Dasar",
-    subjectGroup: "Matematika X - Pagi",
-    teacher: "Guru Matematika",
-    description:
-      "Materi pengantar aljabar untuk kelas X dengan video singkat dan latihan bertahap.",
-    status: "published",
-    progress: 68,
-    assignments: {
-      subjectGroups: ["Matematika X - Pagi"],
-      classSections: ["10-A"],
-      students: ["Alya Putri"],
-    },
-    prerequisites: {
-      courses: ["Bilangan & Operasi Dasar"],
-      exams: ["Placement Test Matematika X"],
-    },
-    modules: [
-      {
-        id: "mod-1",
-        title: "Konsep Variabel",
-        type: "youtube_upload",
-        resourceUrl: "https://youtu.be/dQw4w9WgXcQ",
-        duration: "12 menit",
-      },
-      {
-        id: "mod-2",
-        title: "Latihan Persamaan",
-        type: "drive_upload",
-        resourceUrl: "https://drive.google.com/file/d/example/view",
-        duration: "20 menit",
-      },
-    ],
-  },
-  {
-    id: "course-fisika-olimpiade",
-    title: "Kinematika Olimpiade",
-    subjectGroup: "Olimpiade Fisika",
-    teacher: "Guru Fisika",
-    description:
-      "Rangkaian materi persiapan olimpiade dengan pembahasan soal gerak lurus dan grafik.",
-    status: "draft",
-    progress: 0,
-    assignments: {
-      subjectGroups: ["Olimpiade Fisika"],
-      classSections: ["11-B", "12-C"],
-      students: [],
-    },
-    prerequisites: {
-      courses: ["Vektor & Gerak Dasar"],
-      exams: ["Pretest Fisika Olimpiade"],
-    },
-    modules: [
-      {
-        id: "mod-3",
-        title: "Gerak Lurus Berubah Beraturan",
-        type: "article",
-        resourceUrl: "",
-        duration: "25 menit",
-      },
-    ],
-  },
-];
 
 const subjectGroupOptions = [
   "Matematika X - Pagi",
@@ -217,7 +164,9 @@ function storageIcon(type: CourseModule["type"]) {
 }
 
 export default function CoursesPage() {
-  const [courses, setCourses] = React.useState<Course[]>(initialCourses);
+  const [courses, setCourses] = React.useState<Course[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [courseOfferingOptions, setCourseOfferingOptions] = React.useState(subjectGroupOptions);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [modulesOpen, setModulesOpen] = React.useState(false);
   const [editingCourse, setEditingCourse] = React.useState<Course | null>(null);
@@ -240,6 +189,25 @@ export default function CoursesPage() {
     resolver: zodResolver(moduleSchema),
     defaultValues: emptyModule,
   });
+
+
+  async function loadCourses() {
+    setLoading(true);
+    try {
+      const [apiCourses, references] = await Promise.all([listCoursesFromApi(), listCourseReferenceOptions()]);
+      setCourses(apiCourses);
+      setCourseOfferingOptions(references.courseOfferings.length ? references.courseOfferings : subjectGroupOptions);
+    } catch (error) {
+      toast("Gagal memuat course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
+      setCourses([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    void loadCourses();
+  }, []);
 
   function toast(
     title: string,
@@ -341,57 +309,98 @@ export default function CoursesPage() {
   }
 
   async function onCourseSubmit(values: CourseForm) {
-    await new Promise((resolve) => setTimeout(resolve, 260));
     if (editingCourse) {
-      setCourses((current) =>
-        current.map((item) =>
-          item.id === editingCourse.id
-            ? {
-                ...item,
-                ...values,
-                subjectGroup:
-                  draftAssignments.subjectGroups[0] ?? item.subjectGroup,
-                assignments: draftAssignments,
-                prerequisites: draftPrerequisites,
-              }
-            : item,
-        ),
-      );
-      toast("Course diperbarui", `${values.title} berhasil disimpan.`);
+      try {
+        const updated = await updateCourseInApi(editingCourse.id, {
+          courseOfferingId: draftAssignments.subjectGroups[0] || editingCourse.courseOfferingId,
+          title: values.title,
+          description: values.description,
+          status: values.status,
+        });
+        const mapped = mapBackendCourseToDirectory(updated, editingCourse.modules, [], []);
+        setCourses((current) =>
+          current.map((item) =>
+            item.id === editingCourse.id
+              ? {
+                  ...item,
+                  ...mapped,
+                  assignments: draftAssignments,
+                  prerequisites: draftPrerequisites,
+                }
+              : item,
+          ),
+        );
+        toast("Course diperbarui", `${values.title} berhasil disimpan ke backend.`);
+      } catch (error) {
+        toast("Gagal memperbarui course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
+        return;
+      }
     } else {
-      setCourses((current) => [
-        {
-          id: `course-${Date.now()}`,
-          modules: [],
-          progress: 0,
-          assignments: draftAssignments,
-          prerequisites: draftPrerequisites,
-          subjectGroup: draftAssignments.subjectGroups[0] ?? "Unassigned",
-          ...values,
-        },
-        ...current,
-      ]);
-      toast("Course dibuat", `${values.title} siap diisi module.`);
+      try {
+        const courseOfferingId = draftAssignments.subjectGroups[0] || courses[0]?.courseOfferingId;
+        if (!courseOfferingId) {
+          toast("Course offering wajib dipilih", "Backend membutuhkan course offering sebelum course dibuat.", "warning");
+          return;
+        }
+        const created = await createCourseInApi({
+          courseOfferingId,
+          title: values.title,
+          description: values.description,
+          status: values.status,
+        });
+        const mapped = mapBackendCourseToDirectory(created, [], [], []);
+        setCourses((current) => [mapped, ...current]);
+        toast("Course dibuat", `${values.title} tersimpan di backend.`);
+      } catch (error) {
+        toast("Gagal membuat course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
+        return;
+      }
     }
     setSheetOpen(false);
   }
 
   async function onModuleSubmit(values: ModuleForm) {
     if (!selectedCourse) return;
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    const newModule = { id: `mod-${Date.now()}`, ...values };
-    setCourses((current) =>
-      current.map((course) =>
-        course.id === selectedCourse.id
-          ? { ...course, modules: [...course.modules, newModule] }
-          : course,
-      ),
-    );
-    moduleForm.reset(emptyModule);
-    toast(
-      "Module ditambahkan",
-      `${values.title} terhubung sebagai ${values.type}.`,
-    );
+    try {
+      const position = selectedCourseLive ? selectedCourseLive.modules.length + 1 : 1;
+      const createdModule = await createModuleInApi(selectedCourse.id, {
+        title: values.title,
+        position,
+        status: "published",
+      });
+      const resourceMapping = mapModuleTypeToResource(values.type);
+      const createdResource = await createResourceInApi(createdModule.id, {
+        title: values.title,
+        externalUrl: values.resourceUrl || "",
+        position: 1,
+        ...resourceMapping,
+      });
+      const newModule = mapBackendModuleToCourseModule(createdModule, [createdResource]);
+      setCourses((current) =>
+        current.map((course) =>
+          course.id === selectedCourse.id
+            ? { ...course, modules: [...course.modules, newModule] }
+            : course,
+        ),
+      );
+      moduleForm.reset(emptyModule);
+      toast(
+        "Module ditambahkan",
+        `${values.title} terhubung sebagai ${values.type}.`,
+      );
+    } catch (error) {
+      toast("Gagal menambah module", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
+    }
+  }
+
+  async function removeCourse(course: Course) {
+    try {
+      await deleteCourseInApi(course.id);
+      setCourses((current) => current.filter((item) => item.id !== course.id));
+      toast("Course dihapus", `${course.title} dihapus dari backend.`, "warning");
+    } catch (error) {
+      toast("Gagal menghapus course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
+    }
   }
 
   function removeModule(moduleId: string) {
@@ -439,24 +448,34 @@ export default function CoursesPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard
-          label="Courses"
-          value={String(metrics.total)}
-          detail={`${metrics.draft} draft`}
-          icon={BookOpen}
-        />
-        <MetricCard
-          label="Modules"
-          value={String(metrics.modules)}
-          detail="Materi tersusun"
-          icon={Film}
-        />
-        <MetricCard
-          label="Published"
-          value={String(metrics.published)}
-          detail="Siap dibaca siswa"
-          icon={Eye}
-        />
+        {loading ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard
+              label="Courses"
+              value={String(metrics.total)}
+              detail={`${metrics.draft} draft`}
+              icon={BookOpen}
+            />
+            <MetricCard
+              label="Modules"
+              value={String(metrics.modules)}
+              detail="Materi tersusun"
+              icon={Film}
+            />
+            <MetricCard
+              label="Published"
+              value={String(metrics.published)}
+              detail="Siap dibaca siswa"
+              icon={Eye}
+            />
+          </>
+        )}
       </div>
 
       <Alert
@@ -480,6 +499,9 @@ export default function CoursesPage() {
             />
           </div>
         </div>
+        {loading ? (
+          <TableSkeleton rows={4} columns={5} />
+        ) : (
         <div className="divide-y divide-[color:var(--border)]">
           {filteredCourses.length === 0 ? (
             <div className="px-5 py-10 text-center">
@@ -545,11 +567,19 @@ export default function CoursesPage() {
                 >
                   <Edit3 className="h-4 w-4" /> Edit
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void removeCourse(course)}
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </Button>
               </div>
             </div>
             );
           })}
         </div>
+        )}
       </Panel>
 
       <RightPullSheet
@@ -634,7 +664,7 @@ export default function CoursesPage() {
                 {
                   key: "subjectGroups" as const,
                   label: "Subject Groups",
-                  options: subjectGroupOptions,
+                  options: courseOfferingOptions,
                   helper:
                     "Rombel akademik/mapel untuk assignment lintas kelas.",
                 },

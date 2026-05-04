@@ -81,6 +81,8 @@ type CreateCourseProgressEventParams struct {
 type Repository interface {
 	ListCourses(ctx context.Context, tenantID string) ([]Course, error)
 	CreateCourse(ctx context.Context, tenantID string, params CreateCourseParams) (Course, error)
+	UpdateCourse(ctx context.Context, tenantID string, id string, params CreateCourseParams) (Course, error)
+	DeleteCourse(ctx context.Context, tenantID string, id string) error
 	ListModules(ctx context.Context, tenantID, courseID string) ([]CourseModule, error)
 	CreateModule(ctx context.Context, tenantID, courseID string, params CreateCourseModuleParams) (CourseModule, error)
 	ListResources(ctx context.Context, tenantID, moduleID string) ([]CourseResource, error)
@@ -104,6 +106,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleCourses(w, r, tenantID)
 	case strings.HasPrefix(path, "/api/v1/courses/") && strings.HasSuffix(path, "/modules"):
 		h.handleModules(w, r, tenantID, extractBetween(path, "/api/v1/courses/", "/modules"))
+	case strings.HasPrefix(path, "/api/v1/courses/"):
+		h.handleCourseByID(w, r, tenantID, strings.TrimPrefix(path, "/api/v1/courses/"))
 	case strings.HasPrefix(path, "/api/v1/course-modules/") && strings.HasSuffix(path, "/resources"):
 		h.handleResources(w, r, tenantID, extractBetween(path, "/api/v1/course-modules/", "/resources"))
 	case path == "/api/v1/course-progress-events":
@@ -139,6 +143,40 @@ func (h Handler) handleCourses(w http.ResponseWriter, r *http.Request, tenantID 
 			return
 		}
 		writeJSON(w, 201, item)
+	default:
+		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+	}
+}
+
+func (h Handler) handleCourseByID(w http.ResponseWriter, r *http.Request, tenantID, courseID string) {
+	if courseID == "" {
+		writeJSON(w, 404, map[string]string{"error": "not_found"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPatch:
+		var p CreateCourseParams
+		if decodeJSON(r, &p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeCourse(p)
+		if err := validateCourse(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateCourse(r.Context(), tenantID, courseID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_course_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if err := h.repo.DeleteCourse(r.Context(), tenantID, courseID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_course_failed"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}

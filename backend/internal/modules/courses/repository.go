@@ -42,8 +42,23 @@ func (r PostgresRepository) CreateCourse(ctx context.Context, tenantID string, p
 INSERT INTO courses (tenant_id, course_offering_id, title, description, status)
 VALUES ($1,$2,$3,$4,$5)
 ON CONFLICT (tenant_id, course_offering_id, title) DO UPDATE SET description=EXCLUDED.description, status=EXCLUDED.status, updated_at=now()
-RETURNING id::text, course_offering_id::text, title, description, status`, tenantID, p.CourseOfferingID, p.Title, p.Description, p.Status).Scan(&item.ID, &item.CourseOfferingID, &item.Title, &item.Description, &item.Status)
+RETURNING id::text, course_offering_id::text, title, description, status, 0::int`, tenantID, p.CourseOfferingID, p.Title, p.Description, p.Status).Scan(&item.ID, &item.CourseOfferingID, &item.Title, &item.Description, &item.Status, &item.ModuleCount)
 	return item, err
+}
+
+func (r PostgresRepository) UpdateCourse(ctx context.Context, tenantID string, id string, p CreateCourseParams) (Course, error) {
+	var item Course
+	err := r.pool.QueryRow(ctx, `
+UPDATE courses
+SET course_offering_id=$3, title=$4, description=$5, status=$6, updated_at=now()
+WHERE tenant_id=$1 AND id=$2
+RETURNING id::text, course_offering_id::text, title, description, status, (SELECT COUNT(*)::int FROM course_modules WHERE tenant_id=$1 AND course_id=$2)`, tenantID, id, p.CourseOfferingID, p.Title, p.Description, p.Status).Scan(&item.ID, &item.CourseOfferingID, &item.Title, &item.Description, &item.Status, &item.ModuleCount)
+	return item, err
+}
+
+func (r PostgresRepository) DeleteCourse(ctx context.Context, tenantID string, id string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM courses WHERE tenant_id=$1 AND id=$2`, tenantID, id)
+	return err
 }
 
 func (r PostgresRepository) ListModules(ctx context.Context, tenantID, courseID string) ([]CourseModule, error) {

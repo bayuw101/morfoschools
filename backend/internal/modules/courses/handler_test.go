@@ -36,7 +36,21 @@ func (repo *fakeCourseRepository) CreateCourse(ctx context.Context, tenantID str
 	if repo.err != nil {
 		return Course{}, repo.err
 	}
-	return Course{ID: "course-1", CourseOfferingID: params.CourseOfferingID, Title: params.Title, Description: params.Description, Status: "draft"}, nil
+	return Course{ID: "course-1", CourseOfferingID: params.CourseOfferingID, Title: params.Title, Description: params.Description, Status: params.Status}, nil
+}
+func (repo *fakeCourseRepository) UpdateCourse(ctx context.Context, tenantID string, id string, params CreateCourseParams) (Course, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedCourseID = id
+	repo.capturedCourse = params
+	if repo.err != nil {
+		return Course{}, repo.err
+	}
+	return Course{ID: id, CourseOfferingID: params.CourseOfferingID, Title: params.Title, Description: params.Description, Status: params.Status}, nil
+}
+func (repo *fakeCourseRepository) DeleteCourse(ctx context.Context, tenantID string, id string) error {
+	repo.capturedTenant = tenantID
+	repo.capturedCourseID = id
+	return repo.err
 }
 func (repo *fakeCourseRepository) ListModules(ctx context.Context, tenantID, courseID string) ([]CourseModule, error) {
 	repo.capturedTenant = tenantID

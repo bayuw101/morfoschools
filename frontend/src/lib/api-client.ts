@@ -1,3 +1,5 @@
+import { getSession } from "./auth";
+
 export class ApiError extends Error {
   constructor(public status: number, public payload: any) {
     super(payload?.error || "API Error");
@@ -5,11 +7,24 @@ export class ApiError extends Error {
 }
 
 export async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const defaultHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  // Tenant-scoped backend routes require X-Tenant-ID.
+  // The login flow stores tenantId in morfoschools_session.
+  if (typeof window !== "undefined") {
+    const session = getSession();
+    if (session?.tenantId) {
+      defaultHeaders["X-Tenant-ID"] = session.tenantId;
+    }
+  }
+
   const url = `http://localhost:8080${path}`;
   const response = await fetch(url, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...defaultHeaders,
       ...options?.headers,
     },
     // Required to send cookies (like morfoschools_token) to localhost:8080

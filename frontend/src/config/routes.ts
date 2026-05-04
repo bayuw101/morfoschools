@@ -1,0 +1,16 @@
+export const appRoutes = {
+  login: "/login",
+  appHome: "/app",
+  tenants: "/app/tenants",
+  users: "/app/users",
+  classes: "/app/classes",
+  subjectGroups: "/app/subject-groups",
+  courses: "/app/courses",
+  courseMonitoring: "/app/course-monitoring",
+  learn: "/app/learn",
+  exams: "/app/exams",
+  students: "/app/students",
+  gallery: "/app/gallery",
+  phaseOneReview: "/app/phase-1-review",
+  settings: "/app/settings",
+} as const;

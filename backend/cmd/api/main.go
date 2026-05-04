@@ -101,7 +101,9 @@ func main() {
 		backgroundCtx := context.Background()
 		startSubmissionRelay(backgroundCtx, cfg.NATSURL, examRepo)
 		startGradingWorker(backgroundCtx, examRepo)
-		startAnalyticsConsumer(backgroundCtx, cfg.NATSURL, cfg.ClickHouseURL)
+		analyticsReader := startAnalyticsConsumer(backgroundCtx, cfg.NATSURL, cfg.ClickHouseURL)
+		analyticsHandler := &analytics.Handler{Reader: analyticsReader}
+		mux.HandleFunc("GET /api/v1/exams/{examId}/analytics", analyticsHandler.GetExamAnalytics)
 	}
 
 	var server http.Handler
@@ -168,30 +170,35 @@ func startGradingWorker(ctx context.Context, repo exams.PostgresSubmissionReposi
 	}()
 }
 
-func startAnalyticsConsumer(ctx context.Context, natsURL string, clickhouseURL string) {
+func startAnalyticsConsumer(ctx context.Context, natsURL string, clickhouseURL string) analytics.ClickHouseReader {
 	conn, err := nats.Connect(natsURL, nats.Timeout(5*time.Second))
 	if err != nil {
 		log.Printf("analytics consumer disabled: connect nats: %v", err)
-		return
+		return analytics.NopReader{}
 	}
 	js, err := conn.JetStream(nats.Context(ctx))
 	if err != nil {
 		log.Printf("analytics consumer disabled: jetstream: %v", err)
-		return
+		return analytics.NopReader{}
 	}
 
 	// Determine sink: ClickHouse if URL provided, otherwise Nop
 	var sink analytics.SubmissionEventSink
+	var reader analytics.ClickHouseReader
 	if clickhouseURL != "" {
 		if err := analytics.InitializeClickHouseSchema(ctx, clickhouseURL); err != nil {
 			log.Printf("clickhouse schema init failed (using nop sink): %v", err)
 			sink = analytics.NopSubmissionEventSink{}
+			reader = analytics.NopReader{}
 		} else {
 			log.Println("clickhouse connected — analytics sink active")
-			sink = analytics.NewClickHouseSink(clickhouseURL, nil)
+			chSink := analytics.NewClickHouseSink(clickhouseURL, nil)
+			sink = chSink
+			reader = chSink
 		}
 	} else {
 		sink = analytics.NopSubmissionEventSink{}
+		reader = analytics.NopReader{}
 	}
 	handler := analytics.NewSubmissionEventHandler(sink)
 
@@ -200,7 +207,7 @@ func startAnalyticsConsumer(ctx context.Context, natsURL string, clickhouseURL s
 	sub, err := streaming.NewNatsPullSubscription(js, "morfosis.exam.submissions.*", "analytics-consumer")
 	if err != nil {
 		log.Printf("analytics consumer disabled: pull subscribe: %v", err)
-		return
+		return analytics.NopReader{}
 	}
 
 	consumer := streaming.NewConsumer(streaming.ConsumerConfig{
@@ -217,6 +224,8 @@ func startAnalyticsConsumer(ctx context.Context, natsURL string, clickhouseURL s
 		consumer.Run(ctx)
 		log.Println("analytics consumer stopped")
 	}()
+
+	return reader
 }
 
 func withCORS(next http.Handler) http.Handler {

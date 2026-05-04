@@ -36,7 +36,9 @@ func TestHandlerListsTenants(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
-	var payload struct{ Data []Tenant `json:"data"` }
+	var payload struct {
+		Data []Tenant `json:"data"`
+	}
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

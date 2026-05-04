@@ -1,6 +1,6 @@
 package tenant
 
 type Tenant struct {
-    ID string
-    Name string
+	ID   string
+	Name string
 }

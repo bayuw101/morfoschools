@@ -23,7 +23,7 @@ export function AppShell({ children }: AppShellProps) {
             aiChatOpen ? "md:grid-cols-[minmax(0,1fr)_390px] xl:grid-cols-[minmax(0,1fr)_430px]" : "md:grid-cols-[minmax(0,1fr)_0px]",
           )}
         >
-          <div className="min-w-0">
+          <div className="h-full min-h-0 min-w-0 overflow-hidden">
             <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-[color:var(--background)] transition-all duration-300 ease-out md:rounded-[30px] md:border md:border-[color:var(--border)] md:shadow-[0_28px_64px_rgba(6,15,29,0.14)]">
               <Topbar aiChatOpen={aiChatOpen} onToggleAiChat={() => setAiChatOpen((value) => !value)} />
               <main className={cn("main-container min-h-0 flex-1", isCanvasRoute ? "overflow-hidden" : "overflow-y-auto")}>
@@ -33,7 +33,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
           <div
             className={cn(
-              "hidden min-w-0 overflow-hidden transition-[opacity,transform] duration-300 ease-out md:block",
+              "hidden h-full min-h-0 min-w-0 overflow-hidden transition-[opacity,transform] duration-300 ease-out md:block",
               aiChatOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-6 opacity-0",
             )}
             aria-hidden={!aiChatOpen}

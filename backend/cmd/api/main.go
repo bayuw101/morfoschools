@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"log"
 	"net/http"
 	"time"
 
+	morfoschools "github.com/bayuw101/morfoschools"
 	"github.com/bayuw101/morfoschools/internal/modules/academic"
 	"github.com/bayuw101/morfoschools/internal/modules/auth"
 	"github.com/bayuw101/morfoschools/internal/modules/courses"
@@ -17,6 +19,7 @@ import (
 	"github.com/bayuw101/morfoschools/internal/platform/config"
 	"github.com/bayuw101/morfoschools/internal/platform/db"
 	httpserver "github.com/bayuw101/morfoschools/internal/platform/http"
+	"github.com/bayuw101/morfoschools/internal/platform/migrate"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
@@ -34,6 +37,20 @@ func main() {
 		}
 		defer pool.Close()
 		dbPool = pool
+
+		// Run database migrations
+		migrations, _ := fs.Sub(morfoschools.MigrationsFS, "migrations")
+		runner := migrate.NewRunner(pool.PgxPool(), migrations)
+		log.Println("checking database migrations...")
+		applied, err := runner.Run(ctx)
+		if err != nil {
+			log.Fatalf("database migration failed: %v", err)
+		}
+		if applied > 0 {
+			log.Printf("applied %d database migrations", applied)
+		} else {
+			log.Println("database schema is up to date")
+		}
 	}
 
 	// Valkey (Redis-compatible cache) — optional, graceful degradation

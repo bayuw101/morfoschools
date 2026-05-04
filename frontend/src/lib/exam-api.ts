@@ -53,6 +53,65 @@ export type ExamResultReadModel = {
   };
 };
 
+export type ExamMonitorReadModel = {
+  examId: string;
+  summary: {
+    eligibleStudents?: number;
+    blockedStudents?: number;
+    startedAttempts?: number;
+    submittedAttempts?: number;
+    waitingForGradingAttempts?: number;
+    completedAttempts?: number;
+    unrelayedSubmissions?: number;
+    oldestUnrelayedSeconds?: number;
+    securityWarningEvents?: number;
+    securityCriticalEvents?: number;
+  };
+  latestReceipts: Array<{
+    receiptId: string;
+    attemptId: string;
+    studentId: string;
+    submissionKind: string;
+    receivedAt: string;
+    relayed: boolean;
+  }>;
+  securityEvents: Array<{
+    id: string;
+    attemptId: string;
+    studentId: string;
+    eventType: string;
+    severity: string;
+    occurredAt: string;
+  }>;
+  generatedAt?: string;
+};
+
+export type ManualGradingQueueItem = {
+  examId?: string;
+  attemptId: string;
+  studentId: string;
+  receiptId: string;
+  autoScore: number;
+  maxScore: number;
+  requiresManualGrading: boolean;
+  questionResults?: unknown;
+  gradedAt?: string;
+};
+
+export type ManualGradingQueue = { items: ManualGradingQueueItem[] };
+export type ManualGradeInput = { manualScore: number; feedback: string; gradedBy: string };
+export type ManualGradeResult = ManualGradeInput & {
+  examId?: string;
+  attemptId: string;
+  studentId?: string;
+  receiptId?: string;
+  status: string;
+  autoScore?: number;
+  finalScore?: number;
+  maxScore?: number;
+  gradedAt?: string;
+};
+
 const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
 const DEMO_STUDENT_ID = "00000000-0000-4000-8000-000000000301";
 const DEMO_EXAM_ID = "00000000-0000-4000-8000-000000000801";
@@ -150,6 +209,28 @@ export function createExamApiClient(options: ExamApiClientOptions = {}) {
       return request<ExamResultReadModel>(`/api/v1/exams/${runtime.examId}/attempts/${runtime.attemptId}/result`, {
         method: "GET",
         identity: { tenantId: runtime.tenantId, userId: runtime.studentId, userRole: "student" },
+      });
+    },
+
+    getMonitor(runtime: ExamRuntimeIds, teacherId: string) {
+      return request<ExamMonitorReadModel>(`/api/v1/exams/${runtime.examId}/monitor`, {
+        method: "GET",
+        identity: { tenantId: runtime.tenantId, userId: teacherId, userRole: "teacher" },
+      });
+    },
+
+    listManualGrading(runtime: ExamRuntimeIds, teacherId: string) {
+      return request<ManualGradingQueue>(`/api/v1/exams/${runtime.examId}/manual-grading`, {
+        method: "GET",
+        identity: { tenantId: runtime.tenantId, userId: teacherId, userRole: "teacher" },
+      });
+    },
+
+    recordManualGrade(runtime: ExamRuntimeIds, attemptId: string, grade: ManualGradeInput) {
+      return request<ManualGradeResult>(`/api/v1/exams/${runtime.examId}/attempts/${attemptId}/manual-grade`, {
+        method: "POST",
+        identity: { tenantId: runtime.tenantId, userId: grade.gradedBy, userRole: "teacher" },
+        body: JSON.stringify(grade),
       });
     },
   };

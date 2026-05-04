@@ -54,6 +54,34 @@ describe("exam backend api client", () => {
     ]);
   });
 
+  it("calls monitor, manual grading queue, and manual grade endpoints as teacher", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/monitor")) {
+        return new Response(JSON.stringify({ examId: "exam-1", summary: { eligibleStudents: 1 }, latestReceipts: [], securityEvents: [] }), { status: 200 });
+      }
+      if (url.endsWith("/manual-grading")) {
+        return new Response(JSON.stringify({ items: [{ attemptId: "attempt-1", studentId: "student-1", receiptId: "rct-1", autoScore: 10, maxScore: 30, requiresManualGrading: true }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ attemptId: "attempt-1", status: "completed", finalScore: 27 }), { status: 200 });
+    });
+    const client = createExamApiClient({ baseUrl: "http://localhost:8080", fetcher: fetchMock });
+    const runtime = resolveExamRuntimeIds("exam-mid-math-x");
+
+    await expect(client.getMonitor(runtime, "teacher-1")).resolves.toMatchObject({ examId: "exam-1" });
+    await expect(client.listManualGrading(runtime, "teacher-1")).resolves.toMatchObject({ items: [{ attemptId: "attempt-1" }] });
+    await expect(client.recordManualGrade(runtime, "attempt-1", { manualScore: 17, feedback: "Baik", gradedBy: "teacher-1" })).resolves.toMatchObject({ status: "completed" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/exams/00000000-0000-4000-8000-000000000801/monitor",
+      expect.objectContaining({ method: "GET", headers: expect.objectContaining({ "X-User-Role": "teacher", "X-User-ID": "teacher-1" }) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/exams/00000000-0000-4000-8000-000000000801/attempts/attempt-1/manual-grade",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ manualScore: 17, feedback: "Baik", gradedBy: "teacher-1" }) }),
+    );
+  });
+
   it("calls gate, autosave, submit, and result endpoints with tenant headers", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);

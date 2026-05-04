@@ -152,6 +152,7 @@
 *   Backend note: Added tenant-scoped receipt verification endpoint `GET /api/v1/receipts/{receipt_id}` returning receipt metadata, submission kind, received timestamp, and relay status for proof-of-submission checks before async grading completes.
 *   Backend note: Added first async NATS JetStream relay for `exam_submission_inbox`; backend auto-creates file-backed stream `MORFOSIS_EXAM_SUBMISSIONS`, publishes to `morfosis.exam.submissions.{kind}`, prioritizes final submits before autosaves, and marks `relayed_at` only after successful publish.
 *   Backend note: Added teacher monitor API with TDD. `GET /api/v1/exams/{exam_id}/monitor` returns attempt counts, unrelayed submission lag, latest receipts, and security-event feed for the live monitor dashboard.
+*   Frontend integration note: Wired `/app/exams/[id]/monitor` to the backend monitor read model through the shared exam API client, with local simulation fallback when the backend is unavailable.
 
 ## Epic 5: Grading & Analytics
 *Tujuan: Penilaian otomatis dan manual essay.*
@@ -166,6 +167,7 @@
 *   Final score calculation & notification.
 *   Implementation note: Added `/app/exams/[id]/grading` manual essay grading dashboard review surface with submission queue filters, MC worker score summary, essay answer review, rubric panel, manual score input, feedback field, final-score calculation, and links from Exam Directory and Exam Manager.
 *   Backend note: Added manual grading APIs with TDD. `GET /api/v1/exams/{exam_id}/manual-grading` returns the pending essay/manual queue, and `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/manual-grade` records manual score, feedback, grader identity, final score, and completes the attempt.
+*   Frontend integration note: Wired `/app/exams/[id]/grading` to the backend manual-grading queue and manual-grade submission endpoints through the shared exam API client, while preserving demo queue fallback for reviewability.
 
 ### ISSUE-016: Final Review & Performance Testing
 *   Load test: Simulasi 500-1000 murid submit serentak pada VPS 2GB.

@@ -24,6 +24,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { createExamApiClient, resolveExamRuntimeIds, type ExamMonitorReadModel } from "@/lib/exam-api";
 import { initialExams } from "../../data";
 
 // Simulated live data types
@@ -39,6 +40,10 @@ type FeedEvent = {
 export default function ExamMonitorDashboard() {
   const params = useParams<{ id: string }>();
   const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
+  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const api = React.useMemo(() => createExamApiClient(), []);
+  const [serverMonitor, setServerMonitor] = React.useState<ExamMonitorReadModel | null>(null);
+  const [serverError, setServerError] = React.useState("");
 
   // Simulation state
   const [activeStudents, setActiveStudents] = React.useState(142);
@@ -52,7 +57,40 @@ export default function ExamMonitorDashboard() {
     { id: "4", time: "10:38:12", student: "Dewi Lestari", type: "violation", detail: "Tab hidden / App switch" },
   ]);
 
-  // Simulate incoming events
+  React.useEffect(() => {
+    api
+      .getMonitor(runtime, "00000000-0000-4000-8000-000000000201")
+      .then((monitor) => {
+        setServerMonitor(monitor);
+        setServerError("");
+      })
+      .catch((error) => setServerError(error instanceof Error ? error.message : "monitor_lookup_failed"));
+  }, [api, runtime]);
+
+  const displayedActiveStudents = serverMonitor?.summary.startedAttempts ?? activeStudents;
+  const displayedOfflineStudents = serverMonitor?.summary.blockedStudents ?? offlineStudents;
+  const displayedSubmittedCount = serverMonitor?.summary.completedAttempts ?? submittedCount;
+  const displayedInboxQueue = serverMonitor?.summary.unrelayedSubmissions ?? inboxQueue;
+  const displayedFeed = serverMonitor
+    ? [
+        ...serverMonitor.latestReceipts.map((receipt) => ({
+          id: receipt.receiptId,
+          time: new Date(receipt.receivedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          student: receipt.studentId,
+          type: "submit" as const,
+          detail: `${receipt.submissionKind} • ${receipt.relayed ? "relayed" : "waiting relay"}`,
+        })),
+        ...serverMonitor.securityEvents.map((event) => ({
+          id: event.id,
+          time: new Date(event.occurredAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          student: event.studentId,
+          type: "violation" as const,
+          detail: `${event.eventType} • ${event.severity}`,
+        })),
+      ]
+    : feed;
+
+  // Simulate incoming events as fallback when backend is not reachable
   React.useEffect(() => {
     const interval = setInterval(() => {
       const rand = Math.random();
@@ -136,9 +174,9 @@ export default function ExamMonitorDashboard() {
 
       {/* Shock Absorber Alert */}
       <Alert
-        tone="info"
-        title="Ingestion Shock Absorber Active"
-        description="Penerimaan jawaban ujian dialihkan ke Inbox Append-only dan antrean NATS. Mencegah database utama down saat ratusan murid mengklik submit secara bersamaan di akhir waktu."
+        tone={serverError ? "warning" : "info"}
+        title={serverError ? "Backend monitor fallback active" : "Ingestion Shock Absorber Active"}
+        description={serverError ? `${serverError}. UI memakai simulasi lokal sampai backend tersedia.` : "Penerimaan jawaban ujian dialihkan ke Inbox Append-only dan antrean NATS. Mencegah database utama down saat ratusan murid mengklik submit secara bersamaan di akhir waktu."}
         className="mb-8"
       />
 
@@ -152,7 +190,7 @@ export default function ExamMonitorDashboard() {
             </div>
           </div>
           <div>
-            <p className="font-display text-3xl font-bold">{activeStudents}</p>
+            <p className="font-display text-3xl font-bold">{displayedActiveStudents}</p>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-1">Siswa online & sinkron</p>
           </div>
         </Panel>
@@ -165,7 +203,7 @@ export default function ExamMonitorDashboard() {
             </div>
           </div>
           <div>
-            <p className="font-display text-3xl font-bold text-amber-700">{offlineStudents}</p>
+            <p className="font-display text-3xl font-bold text-amber-700">{displayedOfflineStudents}</p>
             <p className="text-xs text-amber-600/80 mt-1">Menunggu reconnect</p>
           </div>
         </Panel>
@@ -179,8 +217,8 @@ export default function ExamMonitorDashboard() {
           </div>
           <div>
             <div className="flex items-center gap-3">
-              <p className="font-display text-3xl font-bold">{inboxQueue}</p>
-              {inboxQueue > 0 && <RefreshCw className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />}
+              <p className="font-display text-3xl font-bold">{displayedInboxQueue}</p>
+              {displayedInboxQueue > 0 && <RefreshCw className="h-4 w-4 animate-spin text-[color:var(--muted-foreground)]" />}
             </div>
             <p className="text-xs text-[color:var(--muted-foreground)] mt-1">Sedang diproses worker</p>
           </div>
@@ -194,7 +232,7 @@ export default function ExamMonitorDashboard() {
             </div>
           </div>
           <div>
-            <p className="font-display text-3xl font-bold text-green-700">{submittedCount}</p>
+            <p className="font-display text-3xl font-bold text-green-700">{displayedSubmittedCount}</p>
             <p className="text-xs text-green-600/80 mt-1">Tersimpan aman</p>
           </div>
         </Panel>
@@ -213,7 +251,7 @@ export default function ExamMonitorDashboard() {
           
           <Panel className="flex-1 overflow-y-auto p-0">
             <div className="divide-y divide-[color:var(--border)]">
-              {feed.map((event) => (
+              {displayedFeed.map((event) => (
                 <div key={event.id} className="p-4 flex items-start gap-4 hover:bg-[color:var(--surface-subtle)] transition-colors">
                   <div className="mt-1 shrink-0">
                     {event.type === "submit" && <CheckCircle2 className="h-5 w-5 text-green-500" />}

@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { TextareaField } from "@/components/ui/textarea-field";
+import { createExamApiClient, resolveExamRuntimeIds, type ManualGradingQueueItem } from "@/lib/exam-api";
 import { initialExams } from "../../data";
 
 type SubmissionStatus = "needs_grading" | "partial" | "completed";
@@ -91,11 +92,31 @@ const filters = [
   { label: "Graded", value: "completed" },
 ] as const;
 
+function mapManualQueueItem(item: ManualGradingQueueItem): Submission {
+  return {
+    id: item.attemptId,
+    student: item.studentId,
+    classSection: "Backend queue",
+    receipt: item.receiptId,
+    submittedAt: item.gradedAt ? new Date(item.gradedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "server",
+    status: item.requiresManualGrading ? "needs_grading" : "completed",
+    mcScore: item.autoScore,
+    essayScore: item.requiresManualGrading ? null : 0,
+    maxScore: item.maxScore,
+    violations: 0,
+    answer: JSON.stringify(item.questionResults ?? "Jawaban essay tersedia di read model backend.", null, 2),
+  };
+}
+
 export default function ExamGradingPage() {
   const params = useParams<{ id: string }>();
   const exam = initialExams.find((item) => item.id === params.id) ?? initialExams[0];
+  const runtime = React.useMemo(() => resolveExamRuntimeIds(exam.id), [exam.id]);
+  const api = React.useMemo(() => createExamApiClient(), []);
+  const teacherId = "00000000-0000-4000-8000-000000000201";
   const essayQuestion = exam.questions.find((question) => question.type === "essay") ?? exam.questions[0];
   const [submissions, setSubmissions] = React.useState(submissionsSeed);
+  const [serverError, setServerError] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(submissionsSeed[0]?.id ?? "");
   const [filter, setFilter] = React.useState<(typeof filters)[number]["value"]>("needs_grading");
   const [query, setQuery] = React.useState("");
@@ -103,6 +124,20 @@ export default function ExamGradingPage() {
   const [feedback, setFeedback] = React.useState("Jawaban sudah mencakup metode dan langkah utama. Perjelas kesimpulan akhir agar lebih lengkap.");
 
   const selectedSubmission = submissions.find((item) => item.id === selectedId) ?? submissions[0];
+
+  React.useEffect(() => {
+    api
+      .listManualGrading(runtime, teacherId)
+      .then((queue) => {
+        if (queue.items.length) {
+          const mapped = queue.items.map(mapManualQueueItem);
+          setSubmissions(mapped);
+          setSelectedId(mapped[0]?.id ?? "");
+        }
+        setServerError("");
+      })
+      .catch((error) => setServerError(error instanceof Error ? error.message : "list_manual_grading_failed"));
+  }, [api, runtime]);
 
   React.useEffect(() => {
     if (!selectedSubmission) return;
@@ -124,8 +159,18 @@ export default function ExamGradingPage() {
       Math.max(submissions.filter((item) => item.essayScore !== null).length, 1),
   );
 
-  function saveGrade() {
+  async function saveGrade() {
     const normalizedScore = Math.max(0, Math.min(Number(scoreInput || 0), Number(essayQuestion.points || 20)));
+    try {
+      await api.recordManualGrade(runtime, selectedSubmission.id, {
+        manualScore: normalizedScore,
+        feedback,
+        gradedBy: teacherId,
+      });
+      setServerError("");
+    } catch (error) {
+      setServerError(error instanceof Error ? error.message : "submit_manual_grade_failed");
+    }
     setSubmissions((current) =>
       current.map((submission) =>
         submission.id === selectedSubmission.id
@@ -180,9 +225,9 @@ export default function ExamGradingPage() {
       </div>
 
       <Alert
-        tone="info"
-        title="Async grading pipeline"
-        description="Multiple choice dinilai oleh worker NATS. Submission dengan essay masuk status WAITING_FOR_GRADING sampai guru mengisi skor manual. Setelah skor essay tersimpan, final score dihitung dan status menjadi COMPLETED."
+        tone={serverError ? "warning" : "info"}
+        title={serverError ? "Backend grading fallback active" : "Async grading pipeline"}
+        description={serverError ? `${serverError}. UI tetap memakai data demo lokal agar guru dapat meninjau alur grading.` : "Multiple choice dinilai oleh worker NATS. Submission dengan essay masuk status WAITING_FOR_GRADING sampai guru mengisi skor manual. Setelah skor essay tersimpan, final score dihitung dan status menjadi COMPLETED."}
       />
 
       <div className="grid gap-6 xl:grid-cols-[380px_1fr]">

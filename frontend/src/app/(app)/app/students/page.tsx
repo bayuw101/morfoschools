@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { calculateStudentMetrics, filterStudents, type StudentDomainRecord } from "./student-domain";
@@ -198,10 +199,21 @@ const method = editingStudent ? "PATCH" : "POST";
       </div>
 
       <div className="grid gap-5 md:grid-cols-4">
-        <MetricCard label="Students" value={String(metrics.total)} detail="Master data murid" icon={Users} />
+        {loadingStudents ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard label="Students" value={String(metrics.total)} detail="Master data murid" icon={Users} />
         <MetricCard label="Active" value={String(metrics.active)} detail="Bisa ikut course/exam" icon={ShieldCheck} />
         <MetricCard label="Need attention" value={String(metrics.attention)} detail="Offline/violation/low progress" icon={AlertTriangle} />
         <MetricCard label="Classes" value={String(metrics.classSections)} detail="Administrative sections" icon={School} />
+          </>
+        )}
       </div>
 
       <Alert
@@ -226,9 +238,7 @@ const method = editingStudent ? "PATCH" : "POST";
 
         <div className="divide-y divide-[color:var(--border)]">
           {loadingStudents ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat siswa dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={3} />
           ) : filteredStudents.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada siswa untuk tenant ini.

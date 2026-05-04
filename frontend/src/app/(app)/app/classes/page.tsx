@@ -12,6 +12,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
@@ -178,9 +179,19 @@ const method = editingClass ? "PATCH" : "POST";
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard label="Active Classes" value={String(metrics.active)} detail={`${metrics.inactive} inactive`} icon={School} />
-        <MetricCard label="Enrolled Students" value={String(metrics.enrolledStudents)} detail={`${metrics.unassignedStudents} belum punya kelas`} icon={Users} />
-        <MetricCard label="Average Size" value={String(metrics.averageClassSize)} detail="Siswa per class section" icon={CalendarDays} />
+        {loadingClasses ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard label="Active Classes" value={String(metrics.active)} detail={`${metrics.inactive} inactive`} icon={School} />
+            <MetricCard label="Enrolled Students" value={String(metrics.enrolledStudents)} detail={`${metrics.unassignedStudents} belum punya kelas`} icon={Users} />
+            <MetricCard label="Average Size" value={String(metrics.averageClassSize)} detail="Siswa per class section" icon={CalendarDays} />
+          </>
+        )}
       </div>
 
       <Alert tone="info" title="Administrative hierarchy" description="Class Section hanya untuk pengelompokan administratif siswa. Subject group/rombel akademik akan dipisah pada ISSUE-006." />
@@ -200,9 +211,7 @@ const method = editingClass ? "PATCH" : "POST";
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingClasses ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat class section dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={3} />
           ) : filteredClasses.length > 0 ? filteredClasses.map((item) => (
             <div key={item.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_0.7fr_1fr_0.6fr_auto] md:items-center">
               <div>

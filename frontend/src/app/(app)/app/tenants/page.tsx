@@ -21,6 +21,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { fetchApi } from "@/lib/api-client";
@@ -162,7 +163,15 @@ export default function TenantsPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard
+        {loadingTenants ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard
           label="Total Tenant"
           value={String(metrics.total)}
           detail="Sekolah terdaftar"
@@ -180,6 +189,8 @@ export default function TenantsPage() {
           detail={`${metrics.averageUtilization}% avg utilization`}
           icon={Server}
         />
+          </>
+        )}
       </div>
 
       <Alert
@@ -205,9 +216,7 @@ export default function TenantsPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingTenants ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat tenant dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={3} />
           ) : filteredTenants.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada tenant yang cocok.

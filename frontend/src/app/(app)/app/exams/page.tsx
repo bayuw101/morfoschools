@@ -21,6 +21,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { initialExams, type Exam } from "./data";
 import { fetchApi } from "@/lib/api-client";
@@ -83,7 +84,15 @@ export default function ExamsPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard
+        {loadingExams ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard
           label="Exams"
           value={String(metrics.total)}
           detail="Draft, scheduled, published"
@@ -101,6 +110,8 @@ export default function ExamsPage() {
           detail={`${metrics.submissions} submissions masuk`}
           icon={CalendarClock}
         />
+          </>
+        )}
       </div>
 
       <Alert
@@ -124,9 +135,7 @@ export default function ExamsPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingExams ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat exam dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={3} />
           ) : filteredExams.length === 0 ? (
             <div className="px-5 py-10 text-center">
               <p className="font-display text-lg font-semibold text-[color:var(--foreground)]">{emptyState.title}</p>

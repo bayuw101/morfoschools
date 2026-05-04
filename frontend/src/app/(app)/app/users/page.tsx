@@ -24,6 +24,7 @@ import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Toast, type ToastItem } from "@/components/ui/toast";
 import { fetchApi } from "@/lib/api-client";
 import { getSession } from "@/lib/auth";
@@ -271,24 +272,34 @@ export default function UsersPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard
-          label="Total User"
-          value={String(metrics.total)}
-          detail={`${metrics.active} aktif · ${metrics.invited} invited`}
-          icon={Users}
-        />
-        <MetricCard
-          label="Guru"
-          value={String(metrics.teachers)}
-          detail="Pengajar aktif/diundang"
-          icon={GraduationCap}
-        />
-        <MetricCard
-          label="Admin"
-          value={String(metrics.admins)}
-          detail="Pengelola tenant"
-          icon={ShieldCheck}
-        />
+        {loadingUsers ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard
+              label="Total User"
+              value={String(metrics.total)}
+              detail={`${metrics.active} aktif · ${metrics.invited} invited`}
+              icon={Users}
+            />
+            <MetricCard
+              label="Guru"
+              value={String(metrics.teachers)}
+              detail="Pengajar aktif/diundang"
+              icon={GraduationCap}
+            />
+            <MetricCard
+              label="Admin"
+              value={String(metrics.admins)}
+              detail="Pengelola tenant"
+              icon={ShieldCheck}
+            />
+          </>
+        )}
       </div>
 
       <Panel className="overflow-hidden p-0">
@@ -306,9 +317,7 @@ export default function UsersPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingUsers ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat user dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={5} />
           ) : filteredUsers.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada user untuk tenant ini.

@@ -12,6 +12,7 @@ import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
@@ -159,9 +160,19 @@ export default function SubjectGroupsPage() {
       </div>
 
       <div className="grid gap-5 md:grid-cols-3">
-        <MetricCard label="Active Groups" value={String(metrics.active)} detail={`${metrics.draft} draft`} icon={Layers3} />
+        {loadingGroups ? (
+          <>
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+            <MetricCardSkeleton />
+          </>
+        ) : (
+          <>
+            <MetricCard label="Active Groups" value={String(metrics.active)} detail={`${metrics.draft} draft`} icon={Layers3} />
         <MetricCard label="Subjects" value={String(metrics.subjects)} detail="Mata pelajaran terhubung" icon={BookOpen} />
         <MetricCard label="Cross-section Students" value={String(metrics.students)} detail={`${metrics.averageSize} avg/group`} icon={Users} />
+          </>
+        )}
       </div>
 
       <Alert tone="info" title="Academic grouping" description="Subject Group berbeda dari Class Section: satu rombel akademik bisa berisi siswa dari beberapa kelas administratif." />
@@ -176,9 +187,7 @@ export default function SubjectGroupsPage() {
         </div>
         <div className="divide-y divide-[color:var(--border)]">
           {loadingGroups ? (
-            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
-              Memuat subject group dari backend...
-            </div>
+            <TableSkeleton rows={4} columns={3} />
           ) : filteredGroups.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
               Belum ada subject group untuk tenant ini.

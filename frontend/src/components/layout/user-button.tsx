@@ -3,8 +3,9 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, KeyRound, LogOut, ShieldCheck, UserRound } from "lucide-react";
-import { clearSession, getSession } from "@/lib/auth";
+import { clearSession, getSession, type AuthSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function getInitials(label: string) {
   const parts = label.trim().split(/\s+/).filter(Boolean).slice(0, 2);
@@ -14,16 +15,19 @@ function getInitials(label: string) {
 export function UserButton() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
+  const [session, setSession] = React.useState<AuthSession | null | undefined>(undefined);
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const session = getSession();
-  const resolvedName = session?.name ?? "Guru Morfosis";
-  const resolvedHandle = session?.email?.split("@")[0] ?? "guru.morfosis";
-  const resolvedEmail = session?.email ?? "guru@morfosis.local";
-  const resolvedRole = session?.role ?? "teacher";
-  const resolvedTenant = session?.tenantName ?? "SMP Morfosis Demo";
+  const isLoadingSession = session === undefined;
+  const resolvedName = session?.name ?? "";
+  const resolvedHandle = session?.email?.split("@")[0] ?? "";
+  const resolvedEmail = session?.email ?? "";
+  const resolvedRole = session?.role ?? "";
+  const resolvedTenant = session?.tenantName ?? "";
   const initials = getInitials(resolvedName);
 
   React.useEffect(() => {
+    setSession(getSession());
+
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -40,13 +44,25 @@ export function UserButton() {
 
   return (
     <div ref={rootRef} className="relative">
-      <button type="button" onClick={() => setOpen((value) => !value)} className={cn("group flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-subtle)] py-1 pl-1.5 pr-3 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface)]", open && "border-[color:var(--border-strong)] bg-[color:var(--surface)]")}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#486b9c_0%,#233754_100%)] text-xs font-bold text-white">{initials}</div>
-        <div className="hidden text-left sm:block">
-          <p className="text-xs font-semibold text-[color:var(--foreground)]">{resolvedName}</p>
-          <p className="text-[11px] text-[color:var(--muted-foreground)]">@{resolvedHandle}</p>
-        </div>
-        <ChevronDown className={cn("h-4 w-4 text-[color:var(--muted-foreground)] transition-transform duration-200", open && "rotate-180")} />
+      <button type="button" onClick={() => !isLoadingSession && setOpen((value) => !value)} disabled={isLoadingSession} className={cn("group flex items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-subtle)] py-1 pl-1.5 pr-3 transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface)] disabled:cursor-wait", open && "border-[color:var(--border-strong)] bg-[color:var(--surface)]")}>
+        {isLoadingSession ? (
+          <>
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="hidden space-y-1.5 text-left sm:block">
+              <Skeleton className="h-3 w-24 rounded-full" />
+              <Skeleton className="h-2.5 w-16 rounded-full" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#486b9c_0%,#233754_100%)] text-xs font-bold text-white">{initials}</div>
+            <div className="hidden text-left sm:block">
+              <p className="text-xs font-semibold text-[color:var(--foreground)]">{resolvedName}</p>
+              <p className="text-[11px] text-[color:var(--muted-foreground)]">@{resolvedHandle}</p>
+            </div>
+            <ChevronDown className={cn("h-4 w-4 text-[color:var(--muted-foreground)] transition-transform duration-200", open && "rotate-180")} />
+          </>
+        )}
       </button>
 
       {open ? (

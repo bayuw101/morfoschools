@@ -14,7 +14,7 @@ const suggestions = [
   {
     title: "Cek jadwal ujian",
     description: "Lihat daftar exam dan gate window terbaru dari backend.",
-    prompt: "/jadwal-ujian",
+    prompt: "Tampilkan jadwal ujian terbaru dari backend.",
   },
   {
     title: "Tambah kelas baru",
@@ -24,12 +24,12 @@ const suggestions = [
   {
     title: "Buat exam",
     description: "Siapkan draft ujian lengkap dengan mapel, durasi, status, dan security mode.",
-    prompt: 'Bantu aku buat exam baru. Tanyakan judul, mata pelajaran, durasi, status, dan security mode, lalu susun command /create-exam yang siap dieksekusi.',
+    prompt: 'Bantu aku buat exam baru. Tanyakan judul, mata pelajaran, durasi, status, dan security mode, lalu buat exam jika datanya sudah lengkap.',
   },
   {
     title: "Tambah soal",
     description: "Bantu buat soal pilihan ganda atau essay untuk exam yang sudah ada.",
-    prompt: 'Bantu aku tambah soal ke exam. Tanyakan examId, tipe soal, prompt, poin, opsi jawaban, dan kunci/rubrik, lalu susun command /add-question yang siap dieksekusi.',
+    prompt: 'Bantu aku tambah soal ke exam. Tanyakan examId, tipe soal, prompt, poin, opsi jawaban, dan kunci/rubrik, lalu tambahkan soal jika datanya sudah lengkap.',
   },
 ];
 

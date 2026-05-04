@@ -25,6 +25,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { fetchApi } from "@/lib/api-client";
 import {
   calculateUserMetrics,
   filterUsers,
@@ -86,6 +87,12 @@ const initialUsers: User[] = [
 
 export default function UsersPage() {
   const [users, setUsers] = React.useState<User[]>(initialUsers);
+  React.useEffect(() => {
+    fetchApi<{ data: User[] }>('/api/v1/users')
+      .then(res => setUsers(res.data || []))
+      .catch(err => console.error("Failed to fetch users", err));
+  }, []);
+
   const [query, setQuery] = React.useState("");
   const filteredUsers = filterUsers(users, query);
   const metrics = calculateUserMetrics(users);
@@ -133,52 +140,40 @@ export default function UsersPage() {
 
   async function onSubmit(values: UserForm) {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    const tenantName =
+    // const tenantName =
       tenantOptions.find((tenant) => tenant.value === values.tenantId)?.label ??
       "Unknown Tenant";
-    if (editingUser) {
-      setUsers((current) =>
-        current.map((item) =>
-          item.id === editingUser.id
-            ? { ...item, ...values, tenantName }
-            : item,
-        ),
-      );
-      toast("User updated", `${values.name} berhasil diperbarui.`);
-    } else {
-      setUsers((current) => [
-        {
-          id: `usr-${Date.now()}`,
-          tenantName,
-          status: "invited",
-          lastSeen: "Belum login",
-          ...values,
-        },
-        ...current,
-      ]);
-      toast(
-        "Undangan user dibuat",
-        `${values.email} siap menerima invitation flow.`,
-      );
+const method = editingUser ? "PATCH" : "POST";
+    const endpoint = editingUser ? `/api/v1/users/${editingUser.id}` : "/api/v1/users";
+    
+    try {
+      const savedUser = await fetchApi<User>(endpoint, {
+        method,
+        body: JSON.stringify(values),
+      });
+
+      if (editingUser) {
+        setUsers((current) => current.map((item) => item.id === editingUser.id ? { ...item, ...savedUser } : item));
+        toast("User updated", `${values.name} berhasil diperbarui.`);
+      } else {
+        setUsers((current) => [savedUser, ...current]);
+        toast("User created", `${values.name} siap menerima invitation flow.`);
+      }
+      setSheetOpen(false);
+    } catch (error) {
+      toast("Request failed", (error as Error).message, "warning");
     }
-    setSheetOpen(false);
   }
 
   function deactivateUser() {
     if (!confirmUser) return;
-    setUsers((current) =>
-      current.map((item) =>
-        item.id === confirmUser.id
-          ? { ...item, status: "invited", lastSeen: "Dinonaktifkan" }
-          : item,
-      ),
-    );
-    toast(
-      "User dinonaktifkan",
-      `${confirmUser.name} tidak lagi aktif.`,
-      "warning",
-    );
-    setConfirmUser(null);
+    fetchApi(`/api/v1/users/${confirmUser.id}`, { method: "DELETE" })
+      .then(() => {
+        setUsers((current) => current.filter((item) => item.id !== confirmUser.id));
+        toast("User dihapus", `${confirmUser.name} telah dihapus.`);
+        setConfirmUser(null);
+      })
+      .catch((err) => toast("Gagal", err.message, "warning"));
   }
 
   return (

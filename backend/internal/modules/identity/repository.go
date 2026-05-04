@@ -65,3 +65,29 @@ FROM upsert_user
 `, params.Email, params.Name, tenantID, params.Role).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &user.Status)
 	return user, err
 }
+
+func (repo PostgresRepository) UpdateUser(ctx context.Context, tenantID string, userID string, params CreateUserParams) (User, error) {
+	var user User
+	err := repo.pool.QueryRow(ctx, `
+WITH update_user AS (
+    UPDATE users 
+    SET name = $1, email = $2, updated_at = now()
+    WHERE id = $3
+    RETURNING id, email::text, name, status
+), membership AS (
+    UPDATE tenant_users 
+    SET role = $4
+    WHERE tenant_id = $5 AND user_id = $3
+)
+SELECT id::text, email::text, name, $4 AS role, status
+FROM update_user
+`, params.Name, params.Email, userID, params.Role, tenantID).Scan(&user.ID, &user.Email, &user.Name, &user.Role, &user.Status)
+	return user, err
+}
+
+func (repo PostgresRepository) DeleteUser(ctx context.Context, tenantID string, userID string) error {
+	_, err := repo.pool.Exec(ctx, `
+DELETE FROM tenant_users WHERE tenant_id = $1 AND user_id = $2
+`, tenantID, userID)
+	return err
+}

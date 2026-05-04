@@ -15,6 +15,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { Toast, type ToastItem } from "@/components/ui/toast";
+import { fetchApi } from "@/lib/api-client";
 import {
   calculateClassMetrics,
   filterClasses,
@@ -64,6 +65,12 @@ const teacherOptions = ["Bu Rani Wulandari", "Pak Arif Setiawan", "Bu Maya Karti
 
 export default function ClassesPage() {
   const [classes, setClasses] = React.useState<ClassSection[]>(initialClassSections);
+  React.useEffect(() => {
+    fetchApi<{ data: ClassSection[] }>('/api/v1/classes')
+      .then(res => setClasses(res.data || []))
+      .catch(err => console.error("Failed to fetch classes", err));
+  }, []);
+
   const [students, setStudents] = React.useState<Student[]>(initialStudents);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [manageOpen, setManageOpen] = React.useState(false);
@@ -108,14 +115,26 @@ export default function ClassesPage() {
       return;
     }
 
-    if (editingClass) {
-      setClasses((current) => current.map((item) => item.id === editingClass.id ? { ...item, ...values } : item));
-      toast("Class section diperbarui", `${values.name} berhasil disimpan.`);
-    } else {
-      setClasses((current) => [{ id: `cls-${values.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, studentIds: [], ...values }, ...current]);
-      toast("Class section dibuat", `${values.name} siap menerima enrollment siswa.`);
+const method = editingClass ? "PATCH" : "POST";
+    const endpoint = editingClass ? `/api/v1/classes/${editingClass.id}` : "/api/v1/classes";
+    
+    try {
+      const saved = await fetchApi<ClassSection>(endpoint, {
+        method,
+        body: JSON.stringify(values),
+      });
+
+      if (editingClass) {
+        setClasses((current) => current.map((item) => item.id === editingClass.id ? { ...item, ...saved } : item));
+        toast("Class section diperbarui", `${values.name} berhasil disimpan.`);
+      } else {
+        setClasses((current) => [saved, ...current]);
+        toast("Class section dibuat", `${values.name} siap menerima enrollment siswa.`);
+      }
+      setSheetOpen(false);
+    } catch (error) {
+      toast("Error", (error as Error).message, "warning");
     }
-    setSheetOpen(false);
   }
 
   function toggleStudent(student: Student) {

@@ -32,6 +32,23 @@ func (repo *fakeUserRepository) CreateUser(ctx context.Context, tenantID string,
 	return User{ID: "user-1", Email: params.Email, Name: params.Name, Role: params.Role, Status: "invited"}, nil
 }
 
+func (repo *fakeUserRepository) UpdateUser(ctx context.Context, tenantID string, userID string, params CreateUserParams) (User, error) {
+	repo.capturedTenant = tenantID
+	repo.capturedParams = params
+	if repo.err != nil {
+		return User{}, repo.err
+	}
+	return User{ID: userID, Email: params.Email, Name: params.Name, Role: params.Role, Status: "active"}, nil
+}
+
+func (repo *fakeUserRepository) DeleteUser(ctx context.Context, tenantID string, userID string) error {
+	repo.capturedTenant = tenantID
+	if repo.err != nil {
+		return repo.err
+	}
+	return nil
+}
+
 func TestListUsersRequiresTenantContext(t *testing.T) {
 	repo := &fakeUserRepository{}
 	handler := NewHandler(repo)
@@ -103,5 +120,43 @@ func TestCreateUserRejectsInvalidRole(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestUpdateUserNormalizesAndStoresTenantMembership(t *testing.T) {
+	repo := &fakeUserRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	body := bytes.NewBufferString(`{"email":" ADMIN@Example.sch.id ","name":" Admin A ","role":"admin"}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/users/user-1", body)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" {
+		t.Fatalf("expected tenant-1 update, got %q", repo.capturedTenant)
+	}
+	if repo.capturedParams.Email != "admin@example.sch.id" || repo.capturedParams.Name != "Admin A" || repo.capturedParams.Role != "admin" {
+		t.Fatalf("unexpected captured params: %+v", repo.capturedParams)
+	}
+}
+
+func TestDeleteUserRemovesTenantMembership(t *testing.T) {
+	repo := &fakeUserRepository{}
+	handler := tenantctx.Middleware(NewHandler(repo))
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/user-1", nil)
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if repo.capturedTenant != "tenant-1" {
+		t.Fatalf("expected tenant-1 delete, got %q", repo.capturedTenant)
 	}
 }

@@ -27,6 +27,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { calculateStudentMetrics, filterStudents, type StudentDomainRecord } from "./student-domain";
+import { fetchApi } from "@/lib/api-client";
 
 const studentSchema = z.object({
   nisn: z.string().min(4, "NISN minimal 4 karakter"),
@@ -108,7 +109,13 @@ const initialStudents: Student[] = [
 ];
 
 export default function StudentsPage() {
-  const [students, setStudents] = React.useState(initialStudents);
+  const [students, setStudents] = React.useState<Student[]>(initialStudents);
+  React.useEffect(() => {
+    fetchApi<{ data: Student[] }>('/api/v1/students')
+      .then(res => setStudents(res.data || []))
+      .catch(err => console.error("Failed to fetch students", err));
+  }, []);
+
   const [query, setQuery] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
@@ -147,26 +154,24 @@ export default function StudentsPage() {
 
   async function onSubmit(values: StudentForm) {
     await new Promise((resolve) => setTimeout(resolve, 300));
-    if (editingStudent) {
-      setStudents((current) =>
-        current.map((student) =>
-          student.id === editingStudent.id ? { ...student, ...values } : student,
-        ),
-      );
-    } else {
-      setStudents((current) => [
-        {
-          id: `std-${Date.now()}`,
-          ...values,
-          subjectGroups: [],
-          courses: 0,
-          exams: 0,
-          risk: "normal",
-        },
-        ...current,
-      ]);
+const method = editingStudent ? "PATCH" : "POST";
+    const endpoint = editingStudent ? `/api/v1/students/${editingStudent.id}` : "/api/v1/students";
+    
+    try {
+      const saved = await fetchApi<Student>(endpoint, {
+        method,
+        body: JSON.stringify(values),
+      });
+
+      if (editingStudent) {
+        setStudents((current) => current.map((student) => student.id === editingStudent.id ? { ...student, ...saved } : student));
+      } else {
+        setStudents((current) => [saved, ...current]);
+      }
+      setSheetOpen(false);
+    } catch (error) {
+      console.error(error);
     }
-    setSheetOpen(false);
   }
 
   const metrics = calculateStudentMetrics(students);

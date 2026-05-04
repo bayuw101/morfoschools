@@ -11,9 +11,11 @@ import (
 	"github.com/bayuw101/morfoschools/internal/modules/academic"
 	"github.com/bayuw101/morfoschools/internal/modules/analytics"
 	"github.com/bayuw101/morfoschools/internal/modules/auth"
+	"github.com/bayuw101/morfoschools/internal/modules/classes"
 	"github.com/bayuw101/morfoschools/internal/modules/courses"
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
 	"github.com/bayuw101/morfoschools/internal/modules/identity"
+	"github.com/bayuw101/morfoschools/internal/modules/students"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
 	"github.com/bayuw101/morfoschools/internal/platform/authctx"
 	"github.com/bayuw101/morfoschools/internal/platform/cache"
@@ -85,7 +87,18 @@ func main() {
 		mux.Handle("/api/v1/tenants", tenantHandler)
 		mux.Handle("/api/v1/tenants/", tenantHandler)
 
-		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
+		identityHandler := identity.NewHandler(identity.NewPostgresRepository(pgxPool))
+		mux.Handle("/api/v1/users", identityHandler)
+		mux.Handle("/api/v1/users/", identityHandler)
+
+		studentHandler := students.NewHandler(students.NewPostgresRepository(pgxPool))
+		mux.Handle("/api/v1/students", studentHandler)
+		mux.Handle("/api/v1/students/", studentHandler)
+
+		classHandler := classes.NewHandler(classes.NewPostgresRepository(pgxPool))
+		mux.Handle("/api/v1/classes", classHandler)
+		mux.Handle("/api/v1/classes/", classHandler)
+
 		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
 		mux.Handle("/api/v1/academic/subjects", academicHandler)
 		mux.Handle("/api/v1/academic/course-offerings", academicHandler)

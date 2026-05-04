@@ -28,6 +28,8 @@ type CreateUserParams struct {
 type Repository interface {
 	ListUsers(ctx context.Context, tenantID string) ([]User, error)
 	CreateUser(ctx context.Context, tenantID string, params CreateUserParams) (User, error)
+	UpdateUser(ctx context.Context, tenantID string, userID string, params CreateUserParams) (User, error)
+	DeleteUser(ctx context.Context, tenantID string, userID string) error
 }
 
 type Handler struct {
@@ -44,11 +46,25 @@ func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "tenant_required"})
 		return
 	}
+	id := extractBetween(r.URL.Path, "/api/v1/users/", "")
+
 	switch r.Method {
 	case http.MethodGet:
 		handler.list(w, r, tenantID)
 	case http.MethodPost:
 		handler.create(w, r, tenantID)
+	case http.MethodPatch:
+		if id == "" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		handler.update(w, r, tenantID, id)
+	case http.MethodDelete:
+		if id == "" {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		handler.delete(w, r, tenantID, id)
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
@@ -110,4 +126,40 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (handler Handler) update(w http.ResponseWriter, r *http.Request, tenantID string, userID string) {
+	var params CreateUserParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+	params = normalizeCreateUserParams(params)
+	if err := validateCreateUser(params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	user, err := handler.repo.UpdateUser(r.Context(), tenantID, userID, params)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update_user_failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (handler Handler) delete(w http.ResponseWriter, r *http.Request, tenantID string, userID string) {
+	err := handler.repo.DeleteUser(r.Context(), tenantID, userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete_user_failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func extractBetween(path, prefix, suffix string) string {
+	trimmed := strings.TrimPrefix(path, prefix)
+	if suffix != "" {
+		trimmed = strings.TrimSuffix(trimmed, suffix)
+	}
+	return strings.TrimSpace(trimmed)
 }

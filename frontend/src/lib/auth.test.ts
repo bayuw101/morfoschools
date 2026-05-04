@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   type AuthSession,
   type LoginCredentials,
-  type LoginResponse,
   storeSession,
   getSession,
   clearSession,
@@ -83,21 +82,21 @@ describe("session store", () => {
 describe("createAuthApiClient", () => {
   const BASE = "http://localhost:8080";
 
-  it("login sends POST with email/password/tenantId and returns session on 200", async () => {
-    const mockResponse: LoginResponse = {
+  it("login sends POST with email/password/tenantId and normalizes backend session shape", async () => {
+    const backendResponse = {
       token: "tok_xyz",
-      userId: "u1",
-      email: "alya@demo",
-      name: "Alya",
-      role: "student",
-      tenantId: "t1",
-      tenantName: "SMA Demo",
       expiresAt: "2099-01-01T00:00:00Z",
+      user: {
+        id: "u1",
+        email: "alya@demo",
+        name: "Alya",
+        role: "student",
+      },
     };
 
     const fakeFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(mockResponse),
+      json: () => Promise.resolve(backendResponse),
     });
 
     const client = createAuthApiClient({ baseUrl: BASE, fetcher: fakeFetch as unknown as typeof fetch });
@@ -110,7 +109,16 @@ describe("createAuthApiClient", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({ email: "alya@demo", password: "pw" });
     expect(init.headers["X-Tenant-ID"]).toBe("t1");
-    expect(result).toEqual(mockResponse);
+    expect(result).toEqual({
+      token: "tok_xyz",
+      userId: "u1",
+      email: "alya@demo",
+      name: "Alya",
+      role: "student",
+      tenantId: "t1",
+      tenantName: "Tenant t1",
+      expiresAt: "2099-01-01T00:00:00Z",
+    });
   });
 
   it("login throws on 401 with server error message", async () => {

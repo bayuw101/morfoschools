@@ -1,5 +1,7 @@
 import { getSession } from "./auth";
 
+const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
+
 export class ApiError extends Error {
   constructor(public status: number, public payload: any) {
     super(payload?.error || "API Error");
@@ -15,8 +17,9 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
   // The login flow stores tenantId in morfoschools_session.
   if (typeof window !== "undefined") {
     const session = getSession();
-    if (session?.tenantId) {
-      defaultHeaders["X-Tenant-ID"] = session.tenantId;
+    const tenantId = session?.tenantId ?? (session?.token ? DEMO_TENANT_ID : undefined);
+    if (tenantId) {
+      defaultHeaders["X-Tenant-ID"] = tenantId;
     }
   }
 

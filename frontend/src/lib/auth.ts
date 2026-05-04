@@ -26,7 +26,18 @@ export type LoginCredentials = {
   tenantId: string;
 };
 
-export type LoginResponse = AuthSession; // backend returns same shape
+export type BackendLoginResponse = {
+  token: string;
+  expiresAt: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+  };
+};
+
+export type LoginResponse = AuthSession;
 
 // ── Storage-backed session helpers ──────────────────────────
 export type SessionStorage = {
@@ -97,8 +108,8 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
   }
 
   return {
-    login(creds: LoginCredentials) {
-      return request<LoginResponse>("/api/v1/auth/login", {
+    async login(creds: LoginCredentials) {
+      const payload = await request<BackendLoginResponse>("/api/v1/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -106,6 +117,17 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
         },
         body: JSON.stringify({ email: creds.email, password: creds.password }),
       });
+
+      return {
+        token: payload.token,
+        userId: payload.user.id,
+        email: payload.user.email,
+        name: payload.user.name,
+        role: payload.user.role,
+        tenantId: creds.tenantId,
+        tenantName: `Tenant ${creds.tenantId}`,
+        expiresAt: payload.expiresAt,
+      } satisfies LoginResponse;
     },
 
     me(token: string, tenantId: string) {

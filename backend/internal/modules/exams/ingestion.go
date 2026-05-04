@@ -11,11 +11,19 @@ import (
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
+type SubmissionKind string
+
+const (
+	SubmissionKindAutosave SubmissionKind = "autosave"
+	SubmissionKindFinal    SubmissionKind = "final_submit"
+)
+
 type SubmitExamCommand struct {
 	TenantID   string
 	ExamID     string
 	AttemptID  string
 	StudentID  string
+	Kind       SubmissionKind
 	RawPayload []byte
 }
 
@@ -42,7 +50,7 @@ func (handler IngestionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 		return
 	}
-	examID, attemptID, ok := parseSubmitPath(r.URL.Path)
+	examID, attemptID, kind, ok := parseIngestionPath(r.URL.Path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
@@ -67,6 +75,7 @@ func (handler IngestionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		ExamID:     examID,
 		AttemptID:  attemptID,
 		StudentID:  studentID,
+		Kind:       kind,
 		RawPayload: rawPayload,
 	})
 	if err != nil {
@@ -76,15 +85,22 @@ func (handler IngestionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusAccepted, receipt)
 }
 
-func parseSubmitPath(path string) (examID string, attemptID string, ok bool) {
+func parseIngestionPath(path string) (examID string, attemptID string, kind SubmissionKind, ok bool) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) != 7 || parts[0] != "api" || parts[1] != "v1" || parts[2] != "exams" || parts[4] != "attempts" || parts[6] != "submit" {
-		return "", "", false
+	if len(parts) != 7 || parts[0] != "api" || parts[1] != "v1" || parts[2] != "exams" || parts[4] != "attempts" {
+		return "", "", "", false
 	}
 	if parts[3] == "" || parts[5] == "" {
-		return "", "", false
+		return "", "", "", false
 	}
-	return parts[3], parts[5], true
+	switch parts[6] {
+	case "autosave":
+		return parts[3], parts[5], SubmissionKindAutosave, true
+	case "submit":
+		return parts[3], parts[5], SubmissionKindFinal, true
+	default:
+		return "", "", "", false
+	}
 }
 
 func extractStudentID(rawPayload []byte) (string, error) {

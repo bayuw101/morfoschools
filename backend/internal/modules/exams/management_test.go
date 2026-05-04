@@ -31,6 +31,19 @@ func (repo *fakeManagementRepository) ListExams(ctx context.Context, tenantID st
 	repo.capturedTenant = tenantID
 	return repo.exams, repo.err
 }
+
+func (repo *fakeManagementRepository) GetExam(ctx context.Context, tenantID string, examID string) (Exam, error) {
+	return Exam{ID: examID, Title: "Existing", SubjectName: "Matematika", Status: "draft"}, repo.err
+}
+
+func (repo *fakeManagementRepository) UpdateExam(ctx context.Context, tenantID string, examID string, params CreateExamParams) (Exam, error) {
+	return Exam{ID: examID, Title: params.Title, SubjectName: params.SubjectName, Status: params.Status}, repo.err
+}
+
+func (repo *fakeManagementRepository) DeleteExam(ctx context.Context, tenantID string, examID string) error {
+	return repo.err
+}
+
 func (repo *fakeManagementRepository) CreateExam(ctx context.Context, tenantID string, params CreateExamParams) (Exam, error) {
 	repo.capturedTenant = tenantID
 	repo.capturedExam = params

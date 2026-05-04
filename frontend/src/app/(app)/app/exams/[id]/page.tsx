@@ -66,6 +66,7 @@ import {
   subjectGroupOptions,
   subjectOptions,
 } from "../data";
+import { fetchApi } from "@/lib/api-client";
 
 export default function ExamManagerPage() {
   const params = useParams<{ id: string }>();
@@ -344,36 +345,62 @@ export default function ExamManagerPage() {
 
   async function onExamSubmit(values: ExamForm) {
     const nextTargeting = deriveTargetingFromGateRules(draftGateRules);
-    await new Promise((resolve) => setTimeout(resolve, 220));
-    if (!isCreatingNew && selectedExamLive) {
-      setExams((current) =>
-        current.map((item) =>
-          item.id === selectedExamLive.id
-            ? {
-                ...item,
-                ...values,
-                targeting: nextTargeting,
-                prerequisites: draftPrerequisites,
-                gateRules: draftGateRules,
-              }
-            : item,
-        ),
-      );
-      toast("Exam diperbarui", `${values.title} berhasil disimpan.`);
-    } else {
-      const newExam: Exam = {
-        id: `exam-${Date.now()}`,
-        questions: [],
-        submissions: 0,
-        targeting: nextTargeting,
-        prerequisites: draftPrerequisites,
-        gateRules: draftGateRules,
-        ...values,
-      };
-      setExams((current) => [newExam, ...current]);
-      setSelectedExam(newExam);
-      setIsCreatingNew(false);
-      toast("Exam dibuat", `${values.title} siap diisi question bank.`);
+    try {
+      if (isCreatingNew) {
+        const res = await fetchApi<{ data: any }>("/api/v1/exams", {
+          method: "POST",
+          body: JSON.stringify({
+            title: values.title,
+            subjectName: values.subject || "Matematika X",
+            durationMinutes: parseInt(values.duration) || 90,
+            securityMode: values.securityMode,
+            status: values.status,
+            createdBy: "user"
+          }),
+        });
+        const newExamId = res.data?.id || `exam-${Date.now()}`;
+        const newExam: Exam = {
+          id: newExamId,
+          questions: [],
+          submissions: 0,
+          targeting: nextTargeting,
+          prerequisites: draftPrerequisites,
+          gateRules: draftGateRules,
+          ...values,
+        };
+        setExams((current) => [newExam, ...current]);
+        setSelectedExam(newExam);
+        setIsCreatingNew(false);
+        toast("Exam dibuat", `${values.title} berhasil disimpan di sistem.`);
+      } else if (selectedExamLive) {
+        await fetchApi(`/api/v1/exams/${selectedExamLive.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: values.title,
+            subjectName: values.subject || "Matematika X",
+            durationMinutes: parseInt(values.duration) || 90,
+            securityMode: values.securityMode,
+            status: values.status,
+            createdBy: "user"
+          }),
+        });
+        setExams((current) =>
+          current.map((item) =>
+            item.id === selectedExamLive.id
+              ? {
+                  ...item,
+                  ...values,
+                  targeting: nextTargeting,
+                  prerequisites: draftPrerequisites,
+                  gateRules: draftGateRules,
+                }
+              : item,
+          ),
+        );
+        toast("Exam diperbarui", `${values.title} berhasil disimpan ke sistem.`);
+      }
+    } catch (e) {
+      toast("Error", "Gagal menyimpan exam ke backend.", "error");
     }
   }
 

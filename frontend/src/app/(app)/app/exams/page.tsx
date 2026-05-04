@@ -22,12 +22,37 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
-import { initialExams } from "./data";
+import { initialExams, type Exam } from "./data";
+import { fetchApi } from "@/lib/api-client";
 import { calculateExamMetrics, filterExams, getExamEmptyState, getExamStatus } from "./exam-domain";
 
 export default function ExamsPage() {
   const [query, setQuery] = React.useState("");
-  const exams = initialExams;
+  const [exams, setExams] = React.useState<Exam[]>(initialExams);
+  React.useEffect(() => {
+    fetchApi<{ data: any[] }>('/api/v1/exams')
+      .then(res => {
+         if (res.data) {
+           const mapped: Exam[] = res.data.map((ex: any) => ({
+             id: ex.id,
+             title: ex.title,
+             subject: ex.subjectName,
+             status: ex.status,
+             duration: `${ex.durationMinutes} menit`,
+             securityMode: ex.securityMode,
+             rules: "",
+             submissions: 0,
+             questions: Array.from({ length: ex.questionCount }).map((_, i) => ({ id: `q${i}` } as any)),
+             targeting: { subjectGroups: [], classSections: [], students: [] },
+             prerequisites: { courses: [], exams: [] },
+             gateRules: []
+           }));
+           if (mapped.length > 0) setExams(mapped);
+         }
+      })
+      .catch(console.error);
+  }, []);
+
 
   const filteredExams = filterExams(exams, query);
   const metrics = calculateExamMetrics(exams);

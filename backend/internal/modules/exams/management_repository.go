@@ -28,6 +28,33 @@ ORDER BY exams.updated_at DESC`, tenantID)
 	return items, rows.Err()
 }
 
+func (repo PostgresSubmissionRepository) GetExam(ctx context.Context, tenantID string, examID string) (Exam, error) {
+	var item Exam
+	err := repo.pool.QueryRow(ctx, `
+SELECT exams.id::text, exams.title, exams.subject_name, exams.status, exams.duration_minutes, exams.security_mode, COALESCE(exams.created_by::text,''), COUNT(exam_questions.id)::int
+FROM exams
+LEFT JOIN exam_questions ON exam_questions.exam_id = exams.id AND exam_questions.tenant_id = exams.tenant_id
+WHERE exams.tenant_id = $1 AND exams.id = $2
+GROUP BY exams.id`, tenantID, examID).Scan(&item.ID, &item.Title, &item.SubjectName, &item.Status, &item.DurationMinutes, &item.SecurityMode, &item.CreatedBy, &item.QuestionCount)
+	return item, err
+}
+
+func (repo PostgresSubmissionRepository) UpdateExam(ctx context.Context, tenantID string, examID string, p CreateExamParams) (Exam, error) {
+	var item Exam
+	err := repo.pool.QueryRow(ctx, `
+UPDATE exams 
+SET title = $3, subject_name = $4, status = $5, duration_minutes = $6, security_mode = $7, updated_at = now()
+WHERE tenant_id = $1 AND id = $2
+RETURNING id::text, title, subject_name, status, duration_minutes, security_mode, COALESCE(created_by::text,''), (SELECT COUNT(*)::int FROM exam_questions WHERE exam_questions.exam_id = exams.id)`,
+		tenantID, examID, p.Title, p.SubjectName, p.Status, p.DurationMinutes, p.SecurityMode).Scan(&item.ID, &item.Title, &item.SubjectName, &item.Status, &item.DurationMinutes, &item.SecurityMode, &item.CreatedBy, &item.QuestionCount)
+	return item, err
+}
+
+func (repo PostgresSubmissionRepository) DeleteExam(ctx context.Context, tenantID string, examID string) error {
+	_, err := repo.pool.Exec(ctx, `DELETE FROM exams WHERE tenant_id = $1 AND id = $2`, tenantID, examID)
+	return err
+}
+
 func (repo PostgresSubmissionRepository) CreateExam(ctx context.Context, tenantID string, p CreateExamParams) (Exam, error) {
 	var item Exam
 	err := repo.pool.QueryRow(ctx, `

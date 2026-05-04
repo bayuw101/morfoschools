@@ -103,7 +103,10 @@ type CreateExamPrerequisiteParams struct {
 
 type ManagementRepository interface {
 	ListExams(ctx context.Context, tenantID string) ([]Exam, error)
+	GetExam(ctx context.Context, tenantID string, examID string) (Exam, error)
 	CreateExam(ctx context.Context, tenantID string, params CreateExamParams) (Exam, error)
+	UpdateExam(ctx context.Context, tenantID string, examID string, params CreateExamParams) (Exam, error)
+	DeleteExam(ctx context.Context, tenantID string, examID string) error
 	ListQuestions(ctx context.Context, tenantID, examID string) ([]ExamQuestion, error)
 	CreateQuestion(ctx context.Context, tenantID, examID string, params CreateExamQuestionParams) (ExamQuestion, error)
 	ListTargets(ctx context.Context, tenantID, examID string) ([]ExamTarget, error)
@@ -128,11 +131,17 @@ func (h ManagementHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimSuffix(r.URL.Path, "/")
 	if path == "/api/v1/exams" {
-		h.handleExams(w, r, tenantID)
+		h.handleExams(w, r, tenantID, "")
 		return
 	}
 	examID, child, ok := parseManagementPath(path)
 	if !ok {
+		// Could be /api/v1/exams/{id}
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 4 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" {
+			h.handleExams(w, r, tenantID, parts[3])
+			return
+		}
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
 	}
@@ -158,9 +167,18 @@ func parseManagementPath(path string) (string, string, bool) {
 	return parts[3], parts[4], true
 }
 
-func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, tenantID string) {
+func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, tenantID, examID string) {
 	switch r.Method {
 	case http.MethodGet:
+		if examID != "" {
+			item, err := h.repo.GetExam(r.Context(), tenantID, examID)
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "get_exam_failed"})
+				return
+			}
+			writeJSON(w, 200, item)
+			return
+		}
 		items, err := h.repo.ListExams(r.Context(), tenantID)
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "list_exams_failed"})
@@ -184,6 +202,37 @@ func (h ManagementHandler) handleExams(w http.ResponseWriter, r *http.Request, t
 			return
 		}
 		writeJSON(w, 201, item)
+	case http.MethodPatch:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		var p CreateExamParams
+		if json.NewDecoder(r.Body).Decode(&p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeExam(p)
+		if err := validateExam(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}
@@ -214,6 +263,37 @@ func (h ManagementHandler) handleQuestions(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		writeJSON(w, 201, item)
+	case http.MethodPatch:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		var p CreateExamParams
+		if json.NewDecoder(r.Body).Decode(&p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeExam(p)
+		if err := validateExam(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}
@@ -244,6 +324,37 @@ func (h ManagementHandler) handleTargets(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		writeJSON(w, 201, item)
+	case http.MethodPatch:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		var p CreateExamParams
+		if json.NewDecoder(r.Body).Decode(&p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeExam(p)
+		if err := validateExam(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}
@@ -274,6 +385,37 @@ func (h ManagementHandler) handleGateWindows(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		writeJSON(w, 201, item)
+	case http.MethodPatch:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		var p CreateExamParams
+		if json.NewDecoder(r.Body).Decode(&p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeExam(p)
+		if err := validateExam(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}
@@ -304,6 +446,37 @@ func (h ManagementHandler) handlePrerequisites(w http.ResponseWriter, r *http.Re
 			return
 		}
 		writeJSON(w, 201, item)
+	case http.MethodPatch:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		var p CreateExamParams
+		if json.NewDecoder(r.Body).Decode(&p) != nil {
+			writeJSON(w, 400, map[string]string{"error": "invalid_json"})
+			return
+		}
+		p = normalizeExam(p)
+		if err := validateExam(p); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		item, err := h.repo.UpdateExam(r.Context(), tenantID, examID, p)
+		if err != nil {
+			writeJSON(w, 500, map[string]string{"error": "update_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, item)
+	case http.MethodDelete:
+		if examID == "" {
+			writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		if err := h.repo.DeleteExam(r.Context(), tenantID, examID); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "delete_exam_failed"})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "deleted"})
 	default:
 		writeJSON(w, 405, map[string]string{"error": "method_not_allowed"})
 	}

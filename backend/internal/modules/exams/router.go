@@ -29,7 +29,7 @@ func NewRouter(repo PostgresSubmissionRepository) http.Handler {
 
 func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(r.URL.Path, "/")
-	if path == "/api/v1/exams" || isManagementChildPath(path) {
+	if path == "/api/v1/exams" || isManagementResourcePath(path) || isManagementChildPath(path) {
 		router.management.ServeHTTP(w, r)
 		return
 	}
@@ -54,6 +54,11 @@ func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	router.ingestion.ServeHTTP(w, r)
+}
+
+func isManagementResourcePath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	return len(parts) == 4 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams"
 }
 
 func isManagementChildPath(path string) bool {

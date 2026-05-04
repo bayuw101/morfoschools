@@ -140,7 +140,8 @@ const initialUsers: User[] = [
 export default function UsersPage() {
   const [tenantOptions, setTenantOptions] = React.useState<TenantOption[]>(fallbackTenantOptions);
   const [currentTenant, setCurrentTenant] = React.useState<TenantOption>(fallbackTenantOptions[0]);
-  const [users, setUsers] = React.useState<User[]>(initialUsers);
+  const [users, setUsers] = React.useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = React.useState(true);
 
   React.useEffect(() => {
     const sessionTenant = resolveCurrentTenant();
@@ -156,7 +157,8 @@ export default function UsersPage() {
         setTenantOptions(mergedTenantOptions);
         setUsers((userResponse.data || []).map((user) => mapApiUser(user, sessionTenant, mergedTenantOptions)));
       })
-      .catch((err) => console.error("Failed to fetch users", err));
+      .catch((err) => console.error("Failed to fetch users", err))
+      .finally(() => setLoadingUsers(false));
   }, []);
 
   const [query, setQuery] = React.useState("");
@@ -303,7 +305,15 @@ export default function UsersPage() {
           </div>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredUsers.map((user) => (
+          {loadingUsers ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat user dari backend...
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Belum ada user untuk tenant ini.
+            </div>
+          ) : filteredUsers.map((user) => (
             <div
               key={user.id}
               className="grid gap-4 px-5 py-4 md:grid-cols-[1.3fr_0.9fr_0.5fr_0.5fr_auto_auto] md:items-center"

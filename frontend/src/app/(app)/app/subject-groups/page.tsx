@@ -64,25 +64,25 @@ const teacherOptions = ["Guru Matematika", "Guru Fisika", "Guru Bahasa", "Guru I
 const classFilterOptions = [{ label: "Semua kelas", value: "all" }, ...Array.from(new Set(students.map((item) => item.classSection))).map((item) => ({ label: item, value: item }))];
 
 export default function SubjectGroupsPage() {
-  const [groups, setGroups] = React.useState<SubjectGroup[]>(initialGroups);
+  const [groups, setGroups] = React.useState<SubjectGroup[]>([]);
+  const [loadingGroups, setLoadingGroups] = React.useState(true);
   
   React.useEffect(() => {
-    fetchApi<{ data: any[] }>('/api/v1/academic/subject-groups')
+    fetchApi<{ data: any[] }>("/api/v1/academic/subject-groups")
       .then(res => {
-         if (res.data && res.data.length > 0) {
-           const mapped: SubjectGroup[] = res.data.map((sg: any) => ({
-             id: sg.id,
-             name: sg.name,
-             subject: sg.subjectName || "Subject " + sg.subjectId,
-             teacher: "Assigned Teacher", // requires teaching assignment join
-             academicYear: sg.academicYear,
-             status: sg.status,
-             studentIds: Array.from({ length: sg.memberCount }).map((_, i) => "std-" + i)
-           }));
-           setGroups(mapped);
-         }
+        const mapped: SubjectGroup[] = (res.data || []).map((sg: any) => ({
+          id: sg.id,
+          name: sg.name,
+          subject: sg.subjectName || "Subject " + sg.subjectId,
+          teacher: "Assigned Teacher", // requires teaching assignment join
+          academicYear: sg.academicYear,
+          status: sg.status,
+          studentIds: Array.from({ length: sg.memberCount }).map((_, i) => "std-" + i)
+        }));
+        setGroups(mapped);
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoadingGroups(false));
   }, []);
 
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -175,7 +175,15 @@ export default function SubjectGroupsPage() {
           </label>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredGroups.map((group) => (
+          {loadingGroups ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat subject group dari backend...
+            </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Belum ada subject group untuk tenant ini.
+            </div>
+          ) : filteredGroups.map((group) => (
             <div key={group.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1.1fr_0.8fr_0.9fr_0.5fr_auto] md:items-center">
               <div>
                 <p className="font-semibold text-[color:var(--foreground)]">{group.name}</p>

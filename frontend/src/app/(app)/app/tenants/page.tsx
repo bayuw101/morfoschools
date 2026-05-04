@@ -79,6 +79,7 @@ const emptyTenant: TenantForm = {
 
 export default function TenantsPage() {
   const [tenants, setTenants] = React.useState<Tenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = React.useState(true);
   const [query, setQuery] = React.useState("");
   const filteredTenants = sortTenantsByOperationalPriority(filterTenants(tenants, query));
   const metrics = calculateTenantMetrics(tenants);
@@ -87,8 +88,9 @@ export default function TenantsPage() {
 
   React.useEffect(() => {
     fetchApi<{ data: Tenant[] }>("/api/v1/tenants")
-      .then((res) => setTenants(res.data))
-      .catch((err) => console.error("Failed to load tenants", err));
+      .then((res) => setTenants(res.data || []))
+      .catch((err) => console.error("Failed to load tenants", err))
+      .finally(() => setLoadingTenants(false));
   }, []);
 
   const form = useForm<TenantForm>({
@@ -202,7 +204,15 @@ export default function TenantsPage() {
           </div>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredTenants.map((tenant) => {
+          {loadingTenants ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat tenant dari backend...
+            </div>
+          ) : filteredTenants.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Belum ada tenant yang cocok.
+            </div>
+          ) : filteredTenants.map((tenant) => {
             const health = getTenantHealth(tenant);
             return (
             <div

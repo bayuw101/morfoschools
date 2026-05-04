@@ -28,9 +28,10 @@ import { calculateExamMetrics, filterExams, getExamEmptyState, getExamStatus } f
 
 export default function ExamsPage() {
   const [query, setQuery] = React.useState("");
-  const [exams, setExams] = React.useState<Exam[]>(initialExams);
+  const [exams, setExams] = React.useState<Exam[]>([]);
+  const [loadingExams, setLoadingExams] = React.useState(true);
   React.useEffect(() => {
-    fetchApi<{ data: any[] }>('/api/v1/exams')
+    fetchApi<{ data: any[] }>("/api/v1/exams")
       .then(res => {
          if (res.data) {
            const mapped: Exam[] = res.data.map((ex: any) => ({
@@ -47,10 +48,11 @@ export default function ExamsPage() {
              prerequisites: { courses: [], exams: [] },
              gateRules: []
            }));
-           if (mapped.length > 0) setExams(mapped);
+           setExams(mapped);
          }
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoadingExams(false));
   }, []);
 
 
@@ -121,13 +123,17 @@ export default function ExamsPage() {
           </div>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredExams.length === 0 ? (
+          {loadingExams ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat exam dari backend...
+            </div>
+          ) : filteredExams.length === 0 ? (
             <div className="px-5 py-10 text-center">
               <p className="font-display text-lg font-semibold text-[color:var(--foreground)]">{emptyState.title}</p>
               <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[color:var(--muted-foreground)]">{emptyState.description}</p>
             </div>
           ) : null}
-          {filteredExams.map((exam) => {
+          {!loadingExams && filteredExams.map((exam) => {
             const status = getExamStatus(exam.status);
             return (
             <div

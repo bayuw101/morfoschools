@@ -64,11 +64,13 @@ const gradeOptions = ["7", "8", "9", "10", "11", "12"].map((grade) => ({ label: 
 const teacherOptions = ["Bu Rani Wulandari", "Pak Arif Setiawan", "Bu Maya Kartika", "Pak Dimas Nugroho"].map((teacher) => ({ label: teacher, value: teacher }));
 
 export default function ClassesPage() {
-  const [classes, setClasses] = React.useState<ClassSection[]>(initialClassSections);
+  const [classes, setClasses] = React.useState<ClassSection[]>([]);
+  const [loadingClasses, setLoadingClasses] = React.useState(true);
   React.useEffect(() => {
-    fetchApi<{ data: ClassSection[] }>('/api/v1/classes')
+    fetchApi<{ data: ClassSection[] }>("/api/v1/classes")
       .then(res => setClasses(res.data || []))
-      .catch(err => console.error("Failed to fetch classes", err));
+      .catch(err => console.error("Failed to fetch classes", err))
+      .finally(() => setLoadingClasses(false));
   }, []);
 
   const [students, setStudents] = React.useState<Student[]>(initialStudents);
@@ -197,7 +199,11 @@ const method = editingClass ? "PATCH" : "POST";
           </div>
         </div>
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredClasses.length > 0 ? filteredClasses.map((item) => (
+          {loadingClasses ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat class section dari backend...
+            </div>
+          ) : filteredClasses.length > 0 ? filteredClasses.map((item) => (
             <div key={item.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_0.7fr_1fr_0.6fr_auto] md:items-center">
               <div>
                 <p className="font-semibold text-[color:var(--foreground)]">{item.name}</p>

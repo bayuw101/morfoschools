@@ -109,11 +109,13 @@ const initialStudents: Student[] = [
 ];
 
 export default function StudentsPage() {
-  const [students, setStudents] = React.useState<Student[]>(initialStudents);
+  const [students, setStudents] = React.useState<Student[]>([]);
+  const [loadingStudents, setLoadingStudents] = React.useState(true);
   React.useEffect(() => {
-    fetchApi<{ data: Student[] }>('/api/v1/students')
+    fetchApi<{ data: Student[] }>("/api/v1/students")
       .then(res => setStudents(res.data || []))
-      .catch(err => console.error("Failed to fetch students", err));
+      .catch(err => console.error("Failed to fetch students", err))
+      .finally(() => setLoadingStudents(false));
   }, []);
 
   const [query, setQuery] = React.useState("");
@@ -223,7 +225,15 @@ const method = editingStudent ? "PATCH" : "POST";
         </div>
 
         <div className="divide-y divide-[color:var(--border)]">
-          {filteredStudents.map((student) => (
+          {loadingStudents ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Memuat siswa dari backend...
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">
+              Belum ada siswa untuk tenant ini.
+            </div>
+          ) : filteredStudents.map((student) => (
             <div key={student.id} className="grid gap-4 px-5 py-4 xl:grid-cols-[1fr_0.55fr_0.75fr_0.55fr_auto] xl:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

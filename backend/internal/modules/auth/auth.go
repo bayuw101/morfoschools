@@ -243,14 +243,13 @@ func StrictSessionMiddleware(repo Repository) func(http.Handler) http.Handler {
 // a token while requiring a valid session for every other API path.
 func ProtectedSessionMiddleware(repo Repository, publicPrefixes []string) func(http.Handler) http.Handler {
 	strict := StrictSessionMiddleware(repo)
-	passthrough := sessionMiddleware(repo, false)
 	return func(next http.Handler) http.Handler {
 		strictHandler := strict(next)
-		passthroughHandler := passthrough(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for _, prefix := range publicPrefixes {
 				if strings.HasPrefix(r.URL.Path, prefix) {
-					passthroughHandler.ServeHTTP(w, r)
+					stripSessionHeaders(r)
+					next.ServeHTTP(w, r)
 					return
 				}
 			}

@@ -125,9 +125,10 @@ func main() {
 
 	var server http.Handler
 	if dbPool != nil {
-		server = auth.ProtectedSessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient), []string{"/api/v1/auth/"})(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
+		protected := auth.ProtectedSessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient), []string{"/api/v1/auth/"})(authctx.Middleware(tenantctx.Middleware(mux)))
+		server = withCORS(protected)
 	} else {
-		server = authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
+		server = withCORS(authctx.Middleware(tenantctx.Middleware(mux)))
 	}
 	log.Printf("api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, server); err != nil {

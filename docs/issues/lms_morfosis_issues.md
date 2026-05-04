@@ -136,6 +136,7 @@
 *   Implementation note: Submit now redirects to `/app/exam-result/[id]` instead of only showing a toast. Result page displays digital receipt, submission path/status, and instant score when the exam is fully multiple-choice and teacher policy allows auto-calculation; mixed/essay exams show grading pending copy.
 *   Implementation note: Added secure fullscreen shell for gate, take-exam, and receipt pages. The flow uses a centered max-width surface, distinct exam-mode background, lightweight fade/slide animations, auto fullscreen request on mount where browser policy allows it, auto re-enter fullscreen after `Esc`/fullscreen exit when secure mode is required, auto fullscreen exit on back/anchor navigation, and violation logging for fullscreen exit, tab hidden, or window blur events.
 *   Implementation note: Added teacher-configurable `securityMode` in Exam Profile: `secure_required` (default; fullscreen forced with violation counter) or `unsecure_allowed` (manual secure mode control allowed for non-strict exams).
+*   Backend note: Added Exam Management Foundation APIs with TDD for exam profiles, questions, target rules, gate windows, and prerequisites at `/api/v1/exams` and `/api/v1/exams/{exam_id}/{questions|targets|gate-windows|prerequisites}`. This completes the schema/API basis for authoring, granular scheduling, and prerequisite materialization without touching the high-concurrency submission critical path.
 
 ### ISSUE-013: Ingestion Shock Absorber (Inbox & Receipt)
 *   Implement `exam_submission_inbox` (Postgres append-only).

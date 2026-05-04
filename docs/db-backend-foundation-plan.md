@@ -54,12 +54,12 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `course_modules`
   - [x] `course_resources`
   - [x] `course_progress_events`
-- [~] Exam core tables:
+- [x] Exam core tables:
   - [x] `exams`
-  - [ ] `exam_questions`
-  - [ ] `exam_targets`
-  - [ ] `exam_gate_windows`
-  - [ ] `exam_prerequisites`
+  - [x] `exam_questions`
+  - [x] `exam_targets`
+  - [x] `exam_gate_windows`
+  - [x] `exam_prerequisites`
   - [x] `exam_eligible_students`
 - [~] Exam ingestion tables:
   - [x] `exam_attempts`
@@ -117,6 +117,19 @@ Start small with tenancy + health.
 - [x] `POST /api/v1/course-modules/{module_id}/resources` creates/updates metadata-only resources
 - [x] `POST /api/v1/course-progress-events` records low-cost evidence trail events for prerequisites/monitoring
 
+## Phase BE-6 — Exam Management Foundation
+
+- [x] `GET /api/v1/exams` lists tenant-scoped exams with question counts
+- [x] `POST /api/v1/exams` creates exam profile/configuration
+- [x] `GET /api/v1/exams/{exam_id}/questions` lists ordered exam questions
+- [x] `POST /api/v1/exams/{exam_id}/questions` creates/updates questions with MC/short-answer/essay support
+- [x] `GET /api/v1/exams/{exam_id}/targets` lists target rules
+- [x] `POST /api/v1/exams/{exam_id}/targets` creates class/group/student targets
+- [x] `GET /api/v1/exams/{exam_id}/gate-windows` lists publish/open/close windows
+- [x] `POST /api/v1/exams/{exam_id}/gate-windows` creates gate windows with close-after-open validation
+- [x] `GET /api/v1/exams/{exam_id}/prerequisites` lists prerequisite rules
+- [x] `POST /api/v1/exams/{exam_id}/prerequisites` creates course/exam completion prerequisites
+
 ## Verification
 
 - [x] `docker compose config`
@@ -141,3 +154,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-4 academic foundation slice. Added `subjects`, `course_offerings`, and `teaching_assignments` migration plus TDD-covered academic handlers/repository for subject CRUD, subject-to-class course offerings, and teacher assignments. This preserves the administrative-vs-academic model: `class_sections` remain administrative, while `course_offerings` link classes to subjects for learning/exam targeting.
 - 2026-05-04: Completed subject group membership backend. Added `subject_groups` and `subject_group_members` migration plus TDD-covered APIs for flexible cross-class academic groups and student membership, enabling lintas minat/remedial/enrichment targeting without changing administrative class enrollment.
 - 2026-05-04: Completed BE-5 course foundation. Added `courses`, `course_modules`, `course_resources`, and `course_progress_events` migration plus TDD-covered APIs for course/module/resource management and progress evidence events. Resources store metadata/external URLs only so Google Drive/YouTube remain outside LMS critical path.
+- 2026-05-04: Completed BE-6 exam management foundation. Added `exam_questions`, `exam_targets`, `exam_gate_windows`, and `exam_prerequisites` migration plus TDD-covered APIs for exam profiles, authoring, target rules, gate scheduling, and prerequisite rules. Ingestion endpoints remain routed through the same `/api/v1/exams/.../attempts/...` path for the exam critical path.

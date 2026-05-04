@@ -53,7 +53,9 @@ func main() {
 		mux.Handle("/api/v1/course-modules/", courseHandler)
 		mux.Handle("/api/v1/course-progress-events", courseHandler)
 		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
-		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
+		examRouter := exams.NewRouter(examRepo)
+		mux.Handle("/api/v1/exams", examRouter)
+		mux.Handle("/api/v1/exams/", examRouter)
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))
 		startSubmissionRelay(context.Background(), cfg.NATSURL, examRepo)
 	}

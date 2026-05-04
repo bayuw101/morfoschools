@@ -106,8 +106,31 @@ export default function LoginPage() {
                 <button
                   key={account.email}
                   type="button"
-                  onClick={() => { setEmail(account.email); setPassword("morfosis123"); setTenantId(DEMO_TENANT_ID); }}
-                  className="flex w-full items-center justify-between gap-3 rounded-[22px] border border-transparent bg-[color:var(--surface)] px-4 py-3 text-left transition hover:border-[color:var(--border-strong)]"
+                  disabled={loading}
+                  onClick={async () => {
+                    setEmail(account.email);
+                    setPassword("morfosis123");
+                    setTenantId(DEMO_TENANT_ID);
+                    
+                    // Auto login
+                    setError(null);
+                    setLoading(true);
+                    try {
+                      const session = await createAuthApiClient().login({ 
+                        tenantId: DEMO_TENANT_ID, 
+                        email: account.email, 
+                        password: "morfosis123" 
+                      });
+                      storeSession(session);
+                      router.push("/app");
+                    } catch (err) {
+                      const message = err instanceof Error ? err.message : "login_failed";
+                      setError(message === "invalid_credentials" ? "Email, password, atau tenant tidak sesuai." : message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="flex w-full items-center justify-between gap-3 rounded-[22px] border border-transparent bg-[color:var(--surface)] px-4 py-3 text-left transition hover:border-[color:var(--border-strong)] disabled:opacity-50"
                 >
                   <div>
                     <p className="text-sm font-extrabold text-[color:var(--foreground)]">{account.label}</p>

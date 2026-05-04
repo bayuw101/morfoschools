@@ -34,9 +34,12 @@ Kemampuan operasional:
    - Di chat ini user bisa ketik: /jadwal-ujian
 
 2) Menambah kelas
+   - Sebelum POST /api/v1/classes, selalu cek guru via GET /api/v1/users dan filter role=teacher.
+   - Jika homeroomTeacher tidak exact match dengan guru aktif, jangan buat kelas dulu. Tanyakan: "Aku tidak menemukan guru itu. Apakah guru yang kamu maksud ini: ...? Atau mau aku membuatkan data guru itu?"
    - POST /api/v1/classes
    - Body: { "name": "X-A", "gradeLevel": "10", "academicYear": "2025/2026", "homeroomTeacher": "Nama Guru", "status": "active", "studentIds": [] }
    - Di chat ini user bisa ketik: /tambah-kelas {json_body}
+   - Jika perlu membuat guru: /create-teacher {"name":"Nama Guru","email":"guru@sekolah.sch.id"}
 
 3) Create exams
    - POST /api/v1/exams
@@ -52,6 +55,7 @@ Kemampuan operasional:
 
 Aturan keamanan:
 - Untuk operasi tulis (tambah kelas/create exam/add question), jangan mengarang ID. Jika data kurang, tanyakan field yang kurang.
+- Khusus create kelas: validasi homeroomTeacher ke daftar users role=teacher terlebih dahulu. Jika guru tidak ditemukan, jangan lanjut create class; tawarkan kandidat terdekat dan opsi membuat data guru.
 - Jelaskan endpoint, method, header, dan JSON body yang akan dipakai.
 - Jika user belum memakai command eksekusi, bantu susun command yang benar dan minta konfirmasi.
 - Jika user memakai command eksekusi, server proxy akan menjalankan request backend menggunakan session login browser.
@@ -107,6 +111,57 @@ async function readBackendJson(url: string, init: RequestInit) {
   return payload;
 }
 
+function normalizeLookup(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9@.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type BackendUser = {
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  status?: string;
+};
+
+function teacherCandidates(teacherName: string, teachers: BackendUser[]) {
+  const needle = normalizeLookup(teacherName);
+  if (!needle) return [];
+  return teachers
+    .map((teacher) => {
+      const name = normalizeLookup(teacher.name);
+      const email = normalizeLookup(teacher.email);
+      const score =
+        name === needle || email === needle
+          ? 100
+          : name.includes(needle) || needle.includes(name)
+            ? 70
+            : email.includes(needle) || needle.includes(email)
+              ? 55
+              : needle
+                  .split(" ")
+                  .filter((part) => part.length > 2 && name.includes(part)).length * 15;
+      return { teacher, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map((item) => item.teacher);
+}
+
+function formatTeacherList(teachers: BackendUser[]) {
+  if (teachers.length === 0) return "Tidak ada kandidat guru yang mirip.";
+  return teachers
+    .map((teacher, index) => `${index + 1}. ${teacher.name ?? "Tanpa nama"} (${teacher.email ?? "tanpa email"}) — status: ${teacher.status ?? "unknown"}`)
+    .join("\n");
+}
+
 async function handleBackendCommand(command: string, session: AiSession, backendBaseUrl: string) {
   const headers = backendHeaders(session);
   if (!headers) {
@@ -128,8 +183,29 @@ async function handleBackendCommand(command: string, session: AiSession, backend
 
   if (command.toLowerCase().startsWith("/tambah-kelas ")) {
     const body = JSON.parse(command.slice("/tambah-kelas ".length));
+    const homeroomTeacher = String(body?.homeroomTeacher ?? "").trim();
+    if (homeroomTeacher) {
+      const users = await readBackendJson(`${backendBaseUrl}/api/v1/users`, { headers });
+      const teachers = (Array.isArray(users?.data) ? users.data : []).filter((user: BackendUser) => user.role === "teacher");
+      const exactTeacher = teachers.find((teacher: BackendUser) => normalizeLookup(teacher.name) === normalizeLookup(homeroomTeacher) || normalizeLookup(teacher.email) === normalizeLookup(homeroomTeacher));
+      if (!exactTeacher) {
+        const candidates = teacherCandidates(homeroomTeacher, teachers);
+        return `Aku belum membuat kelas karena tidak menemukan guru bernama "${homeroomTeacher}" di data guru.\n\nApakah guru yang kamu maksud ini?\n${formatTeacherList(candidates)}\n\nKalau bukan, apakah kamu mau aku membuatkan data guru itu dulu?\nGunakan command:\n/create-teacher {"name":"${homeroomTeacher}","email":"isi-email-guru@sekolah.sch.id"}\n\nSetelah guru dibuat atau nama guru dikoreksi, jalankan lagi /tambah-kelas dengan homeroomTeacher yang sesuai.`;
+      }
+      body.homeroomTeacher = exactTeacher.name ?? homeroomTeacher;
+    }
     const created = await readBackendJson(`${backendBaseUrl}/api/v1/classes`, { method: "POST", headers, body: JSON.stringify(body) });
     return `Kelas berhasil dibuat via POST /api/v1/classes:\n\n${JSON.stringify(created, null, 2)}`;
+  }
+
+  if (command.toLowerCase().startsWith("/create-teacher ")) {
+    const body = JSON.parse(command.slice("/create-teacher ".length));
+    const created = await readBackendJson(`${backendBaseUrl}/api/v1/users`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...body, role: "teacher" }),
+    });
+    return `Data guru berhasil dibuat via POST /api/v1/users:\n\n${JSON.stringify(created, null, 2)}\n\nSekarang kamu bisa menjalankan /tambah-kelas memakai homeroomTeacher: ${created?.name ?? body?.name}.`;
   }
 
   if (command.toLowerCase().startsWith("/create-exam ")) {

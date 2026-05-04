@@ -152,6 +152,13 @@ Start small with tenancy + health.
 - [x] Background grading worker polls ungraded final submissions from the inbox path and records `completed` for fully auto-gradable MC exams
 - [x] Mixed/essay exams move attempts to `waiting_for_grading` while preserving the automatically scored portion
 
+## Phase BE-10 — Manual Grading API
+
+- [x] `GET /api/v1/exams/{exam_id}/manual-grading` lists attempts waiting for manual essay/short-answer review
+- [x] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/manual-grade` records teacher manual score, feedback, grader identity, and final score
+- [x] Manual grading completion updates `exam_grade_results` and moves the attempt to `completed`
+- [x] Queue index keeps teacher grading dashboard reads scoped by tenant/exam and ordered by oldest pending item
+
 ## Verification
 
 - [x] `docker compose config`
@@ -180,3 +187,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-7 eligibility materialization API. Added TDD-covered `GET /api/v1/exams/{exam_id}/eligibility` and `POST /api/v1/exams/{exam_id}/eligibility/recalculate`, using exam targets + prerequisites to materialize `exam_eligible_students` before runtime exam spikes.
 - 2026-05-04: Completed BE-8 exam gate and security events. Added TDD-covered `POST /api/v1/exams/{exam_id}/gate/check` for materialized eligibility + gate-window/password checks, plus `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` and `exam_security_events` for append-only exam-mode violation audit.
 - 2026-05-04: Completed BE-9 async grading worker. Added MC answer keys, `exam_grade_results`, TDD-covered grading logic for final submissions, auto-score completion for MC-only exams, and `waiting_for_grading` status for essay/mixed exams.
+- 2026-05-04: Completed BE-10 manual grading API. Added TDD-covered queue and grading endpoints for essay/manual review, teacher feedback/scoring fields, final score calculation, and attempt completion after manual grading.

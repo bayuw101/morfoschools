@@ -162,6 +162,7 @@
 *   UI Guru untuk menilai jawaban essay yang tertunda.
 *   Final score calculation & notification.
 *   Implementation note: Added `/app/exams/[id]/grading` manual essay grading dashboard review surface with submission queue filters, MC worker score summary, essay answer review, rubric panel, manual score input, feedback field, final-score calculation, and links from Exam Directory and Exam Manager.
+*   Backend note: Added manual grading APIs with TDD. `GET /api/v1/exams/{exam_id}/manual-grading` returns the pending essay/manual queue, and `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/manual-grade` records manual score, feedback, grader identity, final score, and completes the attempt.
 
 ### ISSUE-016: Final Review & Performance Testing
 *   Load test: Simulasi 500-1000 murid submit serentak pada VPS 2GB.

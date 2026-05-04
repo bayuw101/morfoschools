@@ -36,7 +36,9 @@ func main() {
 	if dbPool != nil {
 		pgxPool := dbPool.PgxPool()
 		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
-		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(exams.NewPostgresSubmissionRepository(pgxPool)))
+		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
+		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
+		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))
 	}
 
 	server := tenantctx.Middleware(withCORS(mux))

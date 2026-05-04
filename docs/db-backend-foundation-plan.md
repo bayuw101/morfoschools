@@ -83,6 +83,7 @@ Start small with tenancy + health.
 - [x] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit`
 - [x] write submit payload to `exam_submission_inbox`
 - [x] return digital receipt immediately
+- [x] `GET /api/v1/receipts/{receipt_id}` verifies a tenant-scoped digital receipt without touching external services
 - [ ] relay inbox rows to NATS JetStream asynchronously
 
 ## Verification
@@ -102,3 +103,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-1 tenancy vertical slice. Added `internal/platform/db`, `internal/platform/tenantctx`, and `internal/modules/tenancy`; wired `cmd/api` to health/readiness plus DB-backed tenant list/create endpoints; verified Docker Go tests, backend image build, full compose runtime, health/readiness, and tenant CRUD smoke test.
 - 2026-05-04: Started BE-2 exam critical path. Added TDD coverage and implementation for `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/submit`, storing raw payloads in `exam_submission_inbox`, recording `exam_submission_receipts`, and returning an immediate `202 Accepted` digital receipt. Verified backend tests, backend image build, compose runtime, and submit smoke test.
 - 2026-05-04: Added autosave ingestion slice. `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/autosave` now reuses the same append-only inbox path with `submission_kind = 'autosave'`, returns an immediate digital receipt, and keeps final submit distinguishable as `final_submit` for downstream workers.
+- 2026-05-04: Added tenant-scoped receipt verification endpoint. `GET /api/v1/receipts/{receipt_id}` returns accepted receipt metadata, submission kind, received timestamp, and relay status so students/operators can verify proof-of-submission independently from async grading/relay state.

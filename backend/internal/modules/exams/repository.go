@@ -2,7 +2,9 @@ package exams
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -34,4 +36,44 @@ FROM receipt_insert
 		return SubmissionReceipt{}, err
 	}
 	return receipt, nil
+}
+
+func (repo PostgresSubmissionRepository) FindReceipt(ctx context.Context, tenantID string, receiptID string) (ReceiptVerification, bool, error) {
+	var receipt ReceiptVerification
+	err := repo.pool.QueryRow(ctx, `
+SELECT
+    receipts.receipt_id::text,
+    'accepted',
+    'receipt_verified',
+    receipts.exam_id::text,
+    receipts.attempt_id::text,
+    receipts.student_id::text,
+    inbox.submission_kind,
+    receipts.received_at,
+    inbox.relayed_at IS NOT NULL
+FROM exam_submission_receipts receipts
+JOIN exam_submission_inbox inbox
+    ON inbox.id = receipts.inbox_id
+    AND inbox.received_at = receipts.received_at
+WHERE receipts.tenant_id = $1
+    AND receipts.receipt_id = $2
+LIMIT 1
+`, tenantID, receiptID).Scan(
+		&receipt.ReceiptID,
+		&receipt.Status,
+		&receipt.Message,
+		&receipt.ExamID,
+		&receipt.AttemptID,
+		&receipt.StudentID,
+		&receipt.SubmissionKind,
+		&receipt.ReceivedAt,
+		&receipt.Relayed,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ReceiptVerification{}, false, nil
+		}
+		return ReceiptVerification{}, false, err
+	}
+	return receipt, true, nil
 }

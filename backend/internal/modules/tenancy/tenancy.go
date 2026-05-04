@@ -31,6 +31,8 @@ type CreateTenantParams struct {
 type Repository interface {
 	ListTenants(context.Context) ([]Tenant, error)
 	CreateTenant(context.Context, CreateTenantParams) (Tenant, error)
+	UpdateTenant(context.Context, string, CreateTenantParams) (Tenant, error)
+	DeleteTenant(context.Context, string) error
 }
 
 type Handler struct {
@@ -42,11 +44,35 @@ func NewHandler(repo Repository) http.Handler {
 }
 
 func (handler Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Simple path routing
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/tenants")
+	path = strings.TrimPrefix(path, "/")
+
 	switch r.Method {
 	case http.MethodGet:
-		handler.list(w, r)
+		if path == "" {
+			handler.list(w, r)
+		} else {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		}
 	case http.MethodPost:
-		handler.create(w, r)
+		if path == "" {
+			handler.create(w, r)
+		} else {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		}
+	case http.MethodPatch:
+		if path != "" {
+			handler.update(w, r, path)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		}
+	case http.MethodDelete:
+		if path != "" {
+			handler.delete(w, r, path)
+		} else {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		}
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 	}
@@ -62,18 +88,8 @@ func (handler Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler Handler) create(w http.ResponseWriter, r *http.Request) {
-	var params CreateTenantParams
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
-		return
-	}
-	params.Name = strings.TrimSpace(params.Name)
-	params.Slug = strings.TrimSpace(params.Slug)
-	params.Province = strings.TrimSpace(params.Province)
-	params.Plan = strings.TrimSpace(params.Plan)
-	params = applyCreateDefaults(params)
-	if err := validateCreateTenant(params); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	params, ok := decodeTenantParams(w, r)
+	if !ok {
 		return
 	}
 	tenant, err := handler.repo.CreateTenant(r.Context(), params)
@@ -82,6 +98,45 @@ func (handler Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, tenant)
+}
+
+func (handler Handler) update(w http.ResponseWriter, r *http.Request, id string) {
+	params, ok := decodeTenantParams(w, r)
+	if !ok {
+		return
+	}
+	tenant, err := handler.repo.UpdateTenant(r.Context(), id, params)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update_tenant_failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, tenant)
+}
+
+func (handler Handler) delete(w http.ResponseWriter, r *http.Request, id string) {
+	if err := handler.repo.DeleteTenant(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete_tenant_failed"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func decodeTenantParams(w http.ResponseWriter, r *http.Request) (CreateTenantParams, bool) {
+	var params CreateTenantParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return CreateTenantParams{}, false
+	}
+	params.Name = strings.TrimSpace(params.Name)
+	params.Slug = strings.TrimSpace(params.Slug)
+	params.Province = strings.TrimSpace(params.Province)
+	params.Plan = strings.TrimSpace(params.Plan)
+	params = applyCreateDefaults(params)
+	if err := validateCreateTenant(params); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return CreateTenantParams{}, false
+	}
+	return params, true
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9-]+$`)

@@ -56,7 +56,7 @@ func (repo PostgresSubmissionRepository) RecalculateEligibility(ctx context.Cont
 	defer tx.Rollback(ctx)
 
 	// We don't DELETE all rows because it destroys access_tokens for active exams.
-	// Instead, we just upsert the ones that exist. We should ideally delete those no longer targeted, 
+	// Instead, we just upsert the ones that exist. We should ideally delete those no longer targeted,
 	// but we'll leave them as is (or they'll just not show up in the exam gate).
 
 	result := EligibilityRecalculationResult{ExamID: examID, TotalCount: len(targets)}

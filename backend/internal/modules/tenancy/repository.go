@@ -64,3 +64,29 @@ func (repo PostgresRepository) CreateTenant(ctx context.Context, params CreateTe
 	)
 	return tenant, err
 }
+
+func (repo PostgresRepository) UpdateTenant(ctx context.Context, id string, params CreateTenantParams) (Tenant, error) {
+	var tenant Tenant
+	err := repo.pool.QueryRow(ctx, `
+		UPDATE tenants 
+		SET name=$1, slug=$2, province=$3, plan=$4, student_cap=$5
+		WHERE id=$6
+		RETURNING id::text, name, slug, province, plan, status, student_cap, 
+			(SELECT COUNT(*)::int FROM tenant_users WHERE tenant_id=tenants.id) AS active_users
+	`, params.Name, params.Slug, params.Province, params.Plan, params.StudentCap, id).Scan(
+		&tenant.ID,
+		&tenant.Name,
+		&tenant.Slug,
+		&tenant.Province,
+		&tenant.Plan,
+		&tenant.Status,
+		&tenant.StudentCap,
+		&tenant.ActiveUsers,
+	)
+	return tenant, err
+}
+
+func (repo PostgresRepository) DeleteTenant(ctx context.Context, id string) error {
+	_, err := repo.pool.Exec(ctx, `DELETE FROM tenants WHERE id=$1`, id)
+	return err
+}

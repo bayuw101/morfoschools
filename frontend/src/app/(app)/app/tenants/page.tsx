@@ -23,6 +23,7 @@ import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
+import { fetchApi } from "@/lib/api-client";
 import {
   calculateTenantMetrics,
   filterTenants,
@@ -77,12 +78,19 @@ const emptyTenant: TenantForm = {
 };
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = React.useState<Tenant[]>(initialTenants);
+  const [tenants, setTenants] = React.useState<Tenant[]>([]);
   const [query, setQuery] = React.useState("");
   const filteredTenants = sortTenantsByOperationalPriority(filterTenants(tenants, query));
   const metrics = calculateTenantMetrics(tenants);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingTenant, setEditingTenant] = React.useState<Tenant | null>(null);
+
+  React.useEffect(() => {
+    fetchApi<{ data: Tenant[] }>("/api/v1/tenants")
+      .then((res) => setTenants(res.data))
+      .catch((err) => console.error("Failed to load tenants", err));
+  }, []);
+
   const form = useForm<TenantForm>({
     resolver: zodResolver(tenantSchema),
     defaultValues: emptyTenant,
@@ -113,23 +121,20 @@ export default function TenantsPage() {
   }
 
   async function onSubmit(values: TenantForm) {
-    await new Promise((resolve) => setTimeout(resolve, 350));
     if (editingTenant) {
+      const updated = await fetchApi<Tenant>(`/api/v1/tenants/${editingTenant.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
       setTenants((current) =>
-        current.map((item) =>
-          item.id === editingTenant.id ? { ...item, ...values } : item,
-        ),
+        current.map((item) => (item.id === editingTenant.id ? updated : item)),
       );
     } else {
-      setTenants((current) => [
-        {
-          id: `tenant-${values.slug}`,
-          status: "setup",
-          activeUsers: 0,
-          ...values,
-        },
-        ...current,
-      ]);
+      const created = await fetchApi<Tenant>("/api/v1/tenants", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      setTenants((current) => [created, ...current]);
     }
     setSheetOpen(false);
   }

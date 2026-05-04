@@ -13,6 +13,8 @@ import (
 type fakeRepository struct {
 	listResult []Tenant
 	createFunc func(context.Context, CreateTenantParams) (Tenant, error)
+	updateFunc func(context.Context, string, CreateTenantParams) (Tenant, error)
+	deleteFunc func(context.Context, string) error
 }
 
 func (repo fakeRepository) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -24,6 +26,20 @@ func (repo fakeRepository) CreateTenant(ctx context.Context, params CreateTenant
 		return repo.createFunc(ctx, params)
 	}
 	return Tenant{}, errors.New("unexpected create")
+}
+
+func (repo fakeRepository) UpdateTenant(ctx context.Context, id string, params CreateTenantParams) (Tenant, error) {
+	if repo.updateFunc != nil {
+		return repo.updateFunc(ctx, id, params)
+	}
+	return Tenant{}, errors.New("unexpected update")
+}
+
+func (repo fakeRepository) DeleteTenant(ctx context.Context, id string) error {
+	if repo.deleteFunc != nil {
+		return repo.deleteFunc(ctx, id)
+	}
+	return errors.New("unexpected delete")
 }
 
 func TestHandlerListsTenants(t *testing.T) {
@@ -99,5 +115,43 @@ func TestHandlerCreatesTenantWithLowSpecDefaults(t *testing.T) {
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d with body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerUpdatesTenant(t *testing.T) {
+	handler := NewHandler(fakeRepository{updateFunc: func(ctx context.Context, id string, params CreateTenantParams) (Tenant, error) {
+		if id != "tenant-1" {
+			t.Fatalf("expected id tenant-1, got %q", id)
+		}
+		if params.Name != "SMA Baru Updated" || params.Slug != "sma-baru-updated" || params.StudentCap != 1000 {
+			t.Fatalf("unexpected update params: %+v", params)
+		}
+		return Tenant{ID: id, Name: params.Name, Slug: params.Slug, Province: params.Province, Plan: params.Plan, Status: "setup", StudentCap: params.StudentCap}, nil
+	}})
+	body := bytes.NewBufferString(`{"name":"SMA Baru Updated","slug":"sma-baru-updated","province":"Banten","plan":"Low Spec VPS","studentCap":1000}`)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/tenants/tenant-1", body)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandlerDeletesTenant(t *testing.T) {
+	handler := NewHandler(fakeRepository{deleteFunc: func(ctx context.Context, id string) error {
+		if id != "tenant-1" {
+			t.Fatalf("expected id tenant-1, got %q", id)
+		}
+		return nil
+	}})
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/tenants/tenant-1", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d with body %s", rec.Code, rec.Body.String())
 	}
 }

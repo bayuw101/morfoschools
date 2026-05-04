@@ -80,7 +80,11 @@ func main() {
 		authRepo := auth.NewCachedRepository(auth.NewPostgresRepository(pgxPool), cacheClient)
 		loginLimiter := auth.NewLoginRateLimiter(cacheClient, 10, 10*time.Minute)
 		mux.Handle("/api/v1/auth/", auth.NewHandlerWithRateLimiter(authRepo, loginLimiter))
-		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
+
+		tenantHandler := tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool))
+		mux.Handle("/api/v1/tenants", tenantHandler)
+		mux.Handle("/api/v1/tenants/", tenantHandler)
+
 		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
 		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
 		mux.Handle("/api/v1/academic/subjects", academicHandler)

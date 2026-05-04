@@ -10,6 +10,7 @@ type Router struct {
 	eligibility   http.Handler
 	gate          http.Handler
 	manualGrading http.Handler
+	result        http.Handler
 	ingestion     http.Handler
 }
 
@@ -19,6 +20,7 @@ func NewRouter(repo PostgresSubmissionRepository) http.Handler {
 		eligibility:   NewEligibilityHandler(repo),
 		gate:          NewGateHandler(repo),
 		manualGrading: NewManualGradingHandler(repo),
+		result:        NewResultHandler(repo),
 		ingestion:     NewIngestionHandler(repo),
 	}
 }
@@ -39,6 +41,10 @@ func (router Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if isManualGradingPath(path) {
 		router.manualGrading.ServeHTTP(w, r)
+		return
+	}
+	if isResultPath(path) {
+		router.result.ServeHTTP(w, r)
 		return
 	}
 	router.ingestion.ServeHTTP(w, r)
@@ -79,4 +85,9 @@ func isManualGradingPath(path string) bool {
 		return true
 	}
 	return len(parts) == 7 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "attempts" && parts[6] == "manual-grade"
+}
+
+func isResultPath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	return len(parts) == 7 && parts[0] == "api" && parts[1] == "v1" && parts[2] == "exams" && parts[4] == "attempts" && parts[6] == "result"
 }

@@ -139,6 +139,7 @@
 *   Implementation note: Added teacher-configurable `securityMode` in Exam Profile: `secure_required` (default; fullscreen forced with violation counter) or `unsecure_allowed` (manual secure mode control allowed for non-strict exams).
 *   Backend note: Added Exam Management Foundation APIs with TDD for exam profiles, questions, target rules, gate windows, and prerequisites at `/api/v1/exams` and `/api/v1/exams/{exam_id}/{questions|targets|gate-windows|prerequisites}`. This completes the schema/API basis for authoring, granular scheduling, and prerequisite materialization without touching the high-concurrency submission critical path.
 *   Backend note: Added Exam Gate & Security Events APIs with TDD. `POST /api/v1/exams/{exam_id}/gate/check` validates materialized eligibility and gate-window/password access before entering the exam client, while `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` stores fullscreen/tab/window/network/copy-paste violations as append-only tenant-scoped audit rows.
+*   Backend note: Added result read API with TDD. `GET /api/v1/exams/{exam_id}/attempts/{attempt_id}/result` combines receipt proof, relay status, attempt/grading state, score fields, question results, and pending/completed messages for the student result page.
 
 ### ISSUE-013: Ingestion Shock Absorber (Inbox & Receipt)
 *   Implement `exam_submission_inbox` (Postgres append-only).

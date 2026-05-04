@@ -166,6 +166,13 @@ Start small with tenancy + health.
 - [x] `backend/scripts/validate_demo_seed.py` verifies the seed/smoke artifacts cover the expected exam flow contract
 - [x] `backend/scripts/smoke_demo.sh` applies the seed through Docker Compose PostgreSQL and validates the seeded graph with deterministic demo IDs for manual API testing
 
+## Phase BE-12 — Result Read API
+
+- [x] `GET /api/v1/exams/{exam_id}/attempts/{attempt_id}/result` returns tenant-scoped attempt result state for the student result page
+- [x] Result response combines latest receipt proof, relay status, attempt status, grading status, auto/manual/final/max scores, question-level results, and feedback metadata
+- [x] Pending/manual grading states return stable `ready=false` messages so the frontend can show grading-pending copy without polling expensive joins during spikes
+- [x] Result repository reads from existing receipt and grading tables; no new schema is required
+
 ## Verification
 
 - [x] `docker compose config`
@@ -196,3 +203,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-9 async grading worker. Added MC answer keys, `exam_grade_results`, TDD-covered grading logic for final submissions, auto-score completion for MC-only exams, and `waiting_for_grading` status for essay/mixed exams.
 - 2026-05-04: Completed BE-10 manual grading API. Added TDD-covered queue and grading endpoints for essay/manual review, teacher feedback/scoring fields, final score calculation, and attempt completion after manual grading.
 - 2026-05-04: Completed BE-11 demo seed and smoke validation. Added idempotent local demo data plus deterministic smoke checks so the backend can be tried without hand-crafting UUID graph data.
+- 2026-05-04: Completed BE-12 result read API. Added tenant-scoped result endpoint combining receipt proof, relay status, attempt/grading state, auto/manual/final scores, question-level results, and pending/completed messages for the student result page.

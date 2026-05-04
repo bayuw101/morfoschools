@@ -47,6 +47,7 @@ cat <<SUMMARY
 
 Suggested API surfaces to try with these IDs:
   POST /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/gate/check
+  GET  /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/attempts/$MORFOSIS_DEMO_ATTEMPT_ID/result
   GET  /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/manual-grading
   POST /api/v1/exams/$MORFOSIS_DEMO_EXAM_ID/attempts/$MORFOSIS_DEMO_ATTEMPT_ID/manual-grade
 SUMMARY

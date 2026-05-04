@@ -9,6 +9,7 @@ import (
 
 	morfoschools "github.com/bayuw101/morfoschools"
 	"github.com/bayuw101/morfoschools/internal/modules/academic"
+	"github.com/bayuw101/morfoschools/internal/modules/analytics"
 	"github.com/bayuw101/morfoschools/internal/modules/auth"
 	"github.com/bayuw101/morfoschools/internal/modules/courses"
 	"github.com/bayuw101/morfoschools/internal/modules/exams"
@@ -20,7 +21,9 @@ import (
 	"github.com/bayuw101/morfoschools/internal/platform/db"
 	httpserver "github.com/bayuw101/morfoschools/internal/platform/http"
 	"github.com/bayuw101/morfoschools/internal/platform/migrate"
+	"github.com/bayuw101/morfoschools/internal/platform/streaming"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
+	"github.com/nats-io/nats.go"
 )
 
 func main() {
@@ -98,6 +101,7 @@ func main() {
 		backgroundCtx := context.Background()
 		startSubmissionRelay(backgroundCtx, cfg.NATSURL, examRepo)
 		startGradingWorker(backgroundCtx, examRepo)
+		startAnalyticsConsumer(backgroundCtx, cfg.NATSURL)
 	}
 
 	var server http.Handler
@@ -161,6 +165,46 @@ func startGradingWorker(ctx context.Context, repo exams.PostgresSubmissionReposi
 				}
 			}
 		}
+	}()
+}
+
+func startAnalyticsConsumer(ctx context.Context, natsURL string) {
+	conn, err := nats.Connect(natsURL, nats.Timeout(5*time.Second))
+	if err != nil {
+		log.Printf("analytics consumer disabled: connect nats: %v", err)
+		return
+	}
+	js, err := conn.JetStream(nats.Context(ctx))
+	if err != nil {
+		log.Printf("analytics consumer disabled: jetstream: %v", err)
+		return
+	}
+
+	// For now, use Nop sink. ClickHouse will replace this in BE-20.
+	sink := analytics.NopSubmissionEventSink{}
+	handler := analytics.NewSubmissionEventHandler(sink)
+
+	// Subscribe to MORFOSIS_EXAM_SUBMISSIONS stream.
+	// We use "analytics-consumer" as the durable consumer name.
+	sub, err := streaming.NewNatsPullSubscription(js, "morfosis.exam.submissions.*", "analytics-consumer")
+	if err != nil {
+		log.Printf("analytics consumer disabled: pull subscribe: %v", err)
+		return
+	}
+
+	consumer := streaming.NewConsumer(streaming.ConsumerConfig{
+		Handler:      handler,
+		Subscription: sub,
+		BatchSize:    25,
+		IdleDelay:    1 * time.Second,
+		Logger:       log.Default(),
+	})
+
+	go func() {
+		defer conn.Close()
+		log.Println("analytics consumer started")
+		consumer.Run(ctx)
+		log.Println("analytics consumer stopped")
 	}()
 }
 

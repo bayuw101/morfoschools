@@ -39,6 +39,7 @@ func main() {
 		examRepo := exams.NewPostgresSubmissionRepository(pgxPool)
 		mux.Handle("/api/v1/exams/", exams.NewIngestionHandler(examRepo))
 		mux.Handle("/api/v1/receipts/", exams.NewReceiptHandler(examRepo))
+		startSubmissionRelay(context.Background(), cfg.NATSURL, examRepo)
 	}
 
 	server := tenantctx.Middleware(withCORS(mux))
@@ -46,6 +47,35 @@ func main() {
 	if err := http.ListenAndServe(cfg.HTTPAddr, server); err != nil {
 		log.Fatalf("api server failed: %v", err)
 	}
+}
+
+func startSubmissionRelay(ctx context.Context, natsURL string, repo exams.PostgresSubmissionRepository) {
+	publisher, err := exams.NewNATSSubmissionPublisher(ctx, natsURL)
+	if err != nil {
+		log.Printf("exam submission relay disabled: connect nats: %v", err)
+		return
+	}
+	relay := exams.NewSubmissionRelay(repo, publisher)
+	go func() {
+		defer publisher.Close()
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				relayed, err := relay.RelayOnce(ctx, 50)
+				if err != nil {
+					log.Printf("exam submission relay failed: %v", err)
+					continue
+				}
+				if relayed > 0 {
+					log.Printf("exam submission relay published %d inbox rows", relayed)
+				}
+			}
+		}
+	}()
 }
 
 func withCORS(next http.Handler) http.Handler {

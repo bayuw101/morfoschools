@@ -6,6 +6,7 @@ func TestLoadUsesEnvironmentWithDefaults(t *testing.T) {
 	t.Setenv("APP_ENV", "test")
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("NATS_URL", "nats://example:4222")
 
 	cfg := Load()
 
@@ -18,12 +19,16 @@ func TestLoadUsesEnvironmentWithDefaults(t *testing.T) {
 	if cfg.DatabaseURL != "postgres://example" {
 		t.Fatalf("expected DatabaseURL from env, got %q", cfg.DatabaseURL)
 	}
+	if cfg.NATSURL != "nats://example:4222" {
+		t.Fatalf("expected NATSURL from env, got %q", cfg.NATSURL)
+	}
 }
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("APP_ENV", "")
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("DATABASE_URL", "")
+	t.Setenv("NATS_URL", "")
 
 	cfg := Load()
 
@@ -35,5 +40,8 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.DatabaseURL != "" {
 		t.Fatalf("expected empty DatabaseURL default, got %q", cfg.DatabaseURL)
+	}
+	if cfg.NATSURL != "nats://localhost:4222" {
+		t.Fatalf("expected default NATSURL, got %q", cfg.NATSURL)
 	}
 }

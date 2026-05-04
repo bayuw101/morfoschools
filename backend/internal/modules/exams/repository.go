@@ -3,6 +3,7 @@ package exams
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,6 +37,70 @@ FROM receipt_insert
 		return SubmissionReceipt{}, err
 	}
 	return receipt, nil
+}
+
+func (repo PostgresSubmissionRepository) FetchUnrelayedSubmissions(ctx context.Context, limit int) ([]PendingSubmission, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	rows, err := repo.pool.Query(ctx, `
+SELECT
+    id,
+    tenant_id::text,
+    exam_id::text,
+    attempt_id::text,
+    student_id::text,
+    receipt_id::text,
+    submission_kind,
+    payload::text,
+    received_at
+FROM exam_submission_inbox
+WHERE relayed_at IS NULL
+ORDER BY
+    CASE WHEN submission_kind = 'final_submit' THEN 0 ELSE 1 END,
+    received_at ASC
+LIMIT $1
+`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var submissions []PendingSubmission
+	for rows.Next() {
+		var submission PendingSubmission
+		var payload string
+		if err := rows.Scan(
+			&submission.InboxID,
+			&submission.TenantID,
+			&submission.ExamID,
+			&submission.AttemptID,
+			&submission.StudentID,
+			&submission.ReceiptID,
+			&submission.SubmissionKind,
+			&payload,
+			&submission.ReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		submission.Payload = []byte(payload)
+		submissions = append(submissions, submission)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return submissions, nil
+}
+
+func (repo PostgresSubmissionRepository) MarkSubmissionRelayed(ctx context.Context, inboxID int64, receivedAt time.Time) error {
+	_, err := repo.pool.Exec(ctx, `
+UPDATE exam_submission_inbox
+SET relayed_at = now()
+WHERE id = $1
+    AND received_at = $2
+    AND relayed_at IS NULL
+`, inboxID, receivedAt)
+	return err
 }
 
 func (repo PostgresSubmissionRepository) FindReceipt(ctx context.Context, tenantID string, receiptID string) (ReceiptVerification, bool, error) {

@@ -9,6 +9,7 @@ import {
   BookOpenCheck,
   Edit3,
   KeyRound,
+  Lock,
   Trash2,
   GraduationCap,
   Mail,
@@ -31,14 +32,22 @@ import { MetricCardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/ui/panel";
 import { RightPullSheet } from "@/components/ui/right-pull-sheet";
 import { calculateStudentMetrics, filterStudents, type StudentDomainRecord } from "./student-domain";
-import { fetchApi } from "@/lib/api-client";
+import { 
+  createStudent, 
+  deleteStudent, 
+  listClassOptions, 
+  listStudents, 
+  updateStudent,
+  type ClassOption 
+} from "./student-api";
+import { updatePasswordInApi } from "../users/user-api";
 import { canSubmitPasswordChange, normalizePasswordPayload, type PasswordFormValues } from "../users/password-domain";
 
 const studentSchema = z.object({
   nisn: z.string().min(4, "NISN minimal 4 karakter"),
   name: z.string().min(3, "Nama minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
-  classSection: z.string().min(1, "Kelas administratif wajib dipilih"),
+  classSectionId: z.string().min(1, "Kelas administratif wajib dipilih"),
   guardianName: z.string().min(3, "Nama wali minimal 3 karakter"),
   guardianPhone: z.string().min(8, "Nomor wali minimal 8 karakter"),
   status: z.enum(["active", "inactive", "graduated"]),
@@ -46,12 +55,12 @@ const studentSchema = z.object({
 
 type StudentForm = z.infer<typeof studentSchema>;
 type Student = StudentForm & StudentDomainRecord & {
+  classSection?: string;
   subjectGroups: string[];
   courses: number;
   exams: number;
 };
 
-const classOptions = ["10-A", "10-B", "10-C", "11-B", "12-C"].map((value) => ({ label: value, value }));
 const statusOptions = [
   { label: "Active", value: "active" },
   { label: "Inactive", value: "inactive" },
@@ -62,7 +71,7 @@ const emptyStudent: StudentForm = {
   nisn: "",
   name: "",
   email: "",
-  classSection: "10-A",
+  classSectionId: "",
   guardianName: "",
   guardianPhone: "",
   status: "active",
@@ -75,7 +84,8 @@ function normalizeStudentRecord(student: Partial<Student>): Student {
     nisn: student.nisn ?? "",
     name: student.name ?? "Tanpa nama",
     email: student.email ?? "",
-    classSection: student.classSection ?? "Belum ada kelas",
+    classSectionId: student.classSectionId ?? "",
+    classSection: student.classSection ?? "No Class",
     guardianName: student.guardianName ?? "-",
     guardianPhone: student.guardianPhone ?? "-",
     status: student.status ?? "active",
@@ -86,58 +96,18 @@ function normalizeStudentRecord(student: Partial<Student>): Student {
   };
 }
 
-const initialStudents: Student[] = [
-  {
-    id: "std-24001",
-    nisn: "24001",
-    name: "Budi Santoso",
-    email: "budi@morfosis.local",
-    classSection: "10-A",
-    guardianName: "Pak Santoso",
-    guardianPhone: "081234567001",
-    status: "active",
-    subjectGroups: ["Matematika X - Pagi", "Bahasa Indonesia Remedial"],
-    courses: 5,
-    exams: 3,
-    risk: "normal",
-  },
-  {
-    id: "std-24002",
-    nisn: "24002",
-    name: "Siti Aminah",
-    email: "siti@morfosis.local",
-    classSection: "10-A",
-    guardianName: "Ibu Aminah",
-    guardianPhone: "081234567002",
-    status: "active",
-    subjectGroups: ["Matematika X - Pagi"],
-    courses: 4,
-    exams: 3,
-    risk: "attention",
-  },
-  {
-    id: "std-24003",
-    nisn: "24003",
-    name: "John Doe",
-    email: "john@morfosis.local",
-    classSection: "10-B",
-    guardianName: "Jane Doe",
-    guardianPhone: "081234567003",
-    status: "inactive",
-    subjectGroups: ["Olimpiade Fisika"],
-    courses: 2,
-    exams: 1,
-    risk: "attention",
-  },
-];
-
 export default function StudentsPage() {
   const [students, setStudents] = React.useState<Student[]>([]);
+  const [classOptions, setClassOptions] = React.useState<ClassOption[]>([]);
   const [loadingStudents, setLoadingStudents] = React.useState(true);
+
   React.useEffect(() => {
-    fetchApi<{ data: Partial<Student>[] }>("/api/v1/students")
-      .then(res => setStudents((res.data || []).map(normalizeStudentRecord)))
-      .catch(err => console.error("Failed to fetch students", err))
+    Promise.all([listStudents(), listClassOptions()])
+      .then(([items, options]) => {
+        setStudents(items.map(normalizeStudentRecord));
+        setClassOptions(options);
+      })
+      .catch((err) => console.error("Failed to fetch", err))
       .finally(() => setLoadingStudents(false));
   }, []);
 
@@ -146,24 +116,26 @@ export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = React.useState<Student | null>(null);
   const [confirmStudent, setConfirmStudent] = React.useState<Student | null>(null);
   const [passwordStudent, setPasswordStudent] = React.useState<Student | null>(null);
-  const [passwordValues, setPasswordValues] = React.useState<PasswordFormValues>({ password: "", confirmPassword: "" });
-  const [savingPassword, setSavingPassword] = React.useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<StudentForm>({
-    resolver: zodResolver(studentSchema),
-    defaultValues: emptyStudent,
+  const [passwordValues, setPasswordValues] = React.useState<PasswordFormValues>({
+    password: "",
+    confirmPassword: "",
   });
+  const [isPasswordOpen, setIsPasswordOpen] = React.useState(false);
+
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = 
+    useForm<StudentForm>({
+      resolver: zodResolver(studentSchema),
+      defaultValues: emptyStudent,
+    });
+
+  const classIdValue = watch("classSectionId");
+  const statusValue = watch("status");
 
   const filteredStudents = filterStudents(students, query);
 
   function openCreate() {
     setEditingStudent(null);
-    reset(emptyStudent);
+    reset({ ...emptyStudent, classSectionId: classOptions[0]?.value ?? "" });
     setSheetOpen(true);
   }
 
@@ -173,7 +145,7 @@ export default function StudentsPage() {
       nisn: student.nisn,
       name: student.name,
       email: student.email,
-      classSection: student.classSection,
+      classSectionId: student.classSectionId,
       guardianName: student.guardianName,
       guardianPhone: student.guardianPhone,
       status: student.status,
@@ -182,15 +154,13 @@ export default function StudentsPage() {
   }
 
   async function onSubmit(values: StudentForm) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-const method = editingStudent ? "PATCH" : "POST";
-    const endpoint = editingStudent ? `/api/v1/students/${editingStudent.id}` : "/api/v1/students";
-    
     try {
-      const saved = await fetchApi<Student>(endpoint, {
-        method,
-        body: JSON.stringify(values),
-      });
+      let saved;
+      if (editingStudent) {
+        saved = await updateStudent(editingStudent.id, values);
+      } else {
+        saved = await createStudent(values);
+      }
 
       const normalizedSaved = normalizeStudentRecord(saved);
       if (editingStudent) {
@@ -207,29 +177,29 @@ const method = editingStudent ? "PATCH" : "POST";
   function openPassword(student: Student) {
     setPasswordStudent(student);
     setPasswordValues({ password: "", confirmPassword: "" });
+    setIsPasswordOpen(true);
   }
 
   async function updateStudentPassword() {
     if (!passwordStudent?.userId || !canSubmitPasswordChange(passwordValues)) return;
-    setSavingPassword(true);
     try {
-      await fetchApi(`/api/v1/users/${passwordStudent.userId}/password`, {
-        method: "PATCH",
-        body: JSON.stringify(normalizePasswordPayload(passwordValues)),
-      });
+      await updatePasswordInApi(passwordStudent.userId, normalizePasswordPayload(passwordValues));
       setPasswordStudent(null);
+      setIsPasswordOpen(false);
     } catch (error) {
       console.error(error);
-    } finally {
-      setSavingPassword(false);
     }
   }
 
-  function deleteStudent() {
+  async function deleteStudentAction() {
     if (!confirmStudent) return;
-    fetchApi(`/api/v1/students/${confirmStudent.id}`, { method: "DELETE" })
-      .then(() => setStudents((current) => current.filter((student) => student.id !== confirmStudent.id)))
-      .finally(() => setConfirmStudent(null));
+    try {
+      await deleteStudent(confirmStudent.id);
+      setStudents((current) => current.filter((student) => student.id !== confirmStudent.id));
+      setConfirmStudent(null);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   const metrics = calculateStudentMetrics(students);
@@ -324,6 +294,9 @@ const method = editingStudent ? "PATCH" : "POST";
                 <Button size="sm" variant="secondary" onClick={() => openEdit(student)}>
                   <Edit3 className="h-4 w-4" /> Manage
                 </Button>
+                <Button size="sm" variant="secondary" onClick={() => openPassword(student)}>
+                  <KeyRound className="h-4 w-4" /> Password
+                </Button>
                 <Button size="sm" variant="danger" onClick={() => setConfirmStudent(student)}>
                   <Trash2 className="h-4 w-4" /> Delete
                 </Button>
@@ -346,20 +319,20 @@ const method = editingStudent ? "PATCH" : "POST";
           </>
         }
       >
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">
-            <FloatingInput label="NISN" error={errors.nisn?.message} {...register("nisn")} />
-            <FloatingSelect label="Status" options={statusOptions} error={errors.status?.message} {...register("status")} />
+            <FloatingInput label="NISN" error={errors.nisn?.message} {...register("nisn")} placeholder="2400x" />
+            <FloatingSelect label="Status" options={statusOptions} error={errors.status?.message} {...register("status")} value={statusValue} onChange={(e) => setValue("status", e.target.value as any, { shouldValidate: true, shouldDirty: true })} />
           </div>
-          <FloatingInput label="Nama murid" error={errors.name?.message} {...register("name")} />
-          <FloatingInput label="Email login" type="email" error={errors.email?.message} {...register("email")} />
-          <FloatingSelect label="Kelas administratif aktif" options={classOptions} error={errors.classSection?.message} {...register("classSection")} />
+          <FloatingInput label="Nama murid" error={errors.name?.message} {...register("name")} placeholder="Budi Santoso" />
+          <FloatingInput label="Email login" type="email" error={errors.email?.message} {...register("email")} placeholder="budi@sekolah.id" />
+          <FloatingSelect label="Kelas administratif aktif" options={classOptions} error={errors.classSectionId?.message} {...register("classSectionId")} value={classIdValue} onChange={(e) => setValue("classSectionId", e.target.value, { shouldValidate: true, shouldDirty: true })} />
 
           <div className="rounded-[28px] border border-[color:var(--border)] bg-[color:var(--surface-subtle)] p-5">
             <div className="mb-4 flex items-center gap-2 font-semibold">
               <UserRound className="h-4 w-4 text-[color:var(--brand)]" /> Guardian contact
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <FloatingInput label="Nama wali" error={errors.guardianName?.message} {...register("guardianName")} />
               <FloatingInput label="Nomor wali" error={errors.guardianPhone?.message} {...register("guardianPhone")} />
             </div>
@@ -385,6 +358,37 @@ const method = editingStudent ? "PATCH" : "POST";
         </form>
       </RightPullSheet>
 
+      <RightPullSheet
+        open={isPasswordOpen}
+        onOpenChange={setIsPasswordOpen}
+        eyebrow="Security account"
+        title={passwordStudent ? `Change password ${passwordStudent.name}` : "Change password"}
+        description="Ganti password login siswa. Backend akan meng-hash password sebelum disimpan."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsPasswordOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={updateStudentPassword} 
+              disabled={!canSubmitPasswordChange(passwordValues)}
+              variant="primary"
+            >
+              Update Password
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <Alert tone="warning" title="Password security" description="Password minimal 8 karakter dan harus cocok. Siswa akan ter-logout dari semua device setelah password diganti." />
+          <div className="space-y-5">
+            <FloatingInput label="New Password" type="password" prefix={<Lock className="h-4 w-4" />} value={passwordValues.password} onChange={(e) => setPasswordValues(p => ({ ...p, password: e.target.value }))} />
+            <FloatingInput label="Confirm New Password" type="password" prefix={<ShieldCheck className="h-4 w-4" />} value={passwordValues.confirmPassword} onChange={(e) => setPasswordValues(p => ({ ...p, confirmPassword: e.target.value }))} />
+            {passwordValues.password && passwordValues.confirmPassword && passwordValues.password !== passwordValues.confirmPassword && (
+              <p className="text-xs font-semibold text-[color:var(--danger)]">Password tidak cocok.</p>
+            )}
+          </div>
+        </div>
+      </RightPullSheet>
+
       <ConfirmDialog
         open={Boolean(confirmStudent)}
         onOpenChange={(open) => !open && setConfirmStudent(null)}
@@ -392,7 +396,7 @@ const method = editingStudent ? "PATCH" : "POST";
         description="Master data siswa ini akan dihapus dari backend tenant aktif."
         confirmLabel="Delete Student"
         tone="danger"
-        onConfirm={deleteStudent}
+        onConfirm={deleteStudentAction}
         details={confirmStudent ? `${confirmStudent.name} • NISN ${confirmStudent.nisn}` : undefined}
       />
     </div>

@@ -9,6 +9,7 @@ import * as z from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FloatingInput } from "@/components/ui/floating-input";
+import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
 import { MetricCard } from "@/components/ui/metric-card";
 import { Panel } from "@/components/ui/panel";
@@ -22,15 +23,28 @@ import { calculateTeacherMetrics, filterTeachers, mapUserToTeacher, type ApiUser
 const teacherSchema = z.object({
   name: z.string().min(3, "Nama minimal 3 karakter"),
   email: z.string().email("Format email tidak valid"),
+  courseOfferingId: z.string().optional(),
 });
 
 type TeacherForm = z.infer<typeof teacherSchema>;
+type SelectOption = { label: string; value: string };
+type ApiCourseOffering = { id: string; subjectName?: string; className?: string; academicYear?: string; term?: string };
+type ApiTeachingAssignment = { id: string; courseOfferingId: string; teacherId: string; teacherName?: string; role: string; status: string };
 
-const emptyTeacher: TeacherForm = { name: "", email: "" };
+const emptyTeacher: TeacherForm = { name: "", email: "", courseOfferingId: "" };
+
+function mapOfferingToOption(offering: ApiCourseOffering): SelectOption {
+  const label = [offering.subjectName, offering.className, offering.academicYear, offering.term]
+    .filter(Boolean)
+    .join(" • ");
+  return { label: label || offering.id, value: offering.id };
+}
 
 export default function TeachersPage() {
   const [teachers, setTeachers] = React.useState<TeacherDirectoryItem[]>([]);
   const [loadingTeachers, setLoadingTeachers] = React.useState(true);
+  const [courseOfferingOptions, setCourseOfferingOptions] = React.useState<SelectOption[]>([]);
+  const [teachingAssignments, setTeachingAssignments] = React.useState<ApiTeachingAssignment[]>([]);
   const [query, setQuery] = React.useState("");
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [editingTeacher, setEditingTeacher] = React.useState<TeacherDirectoryItem | null>(null);
@@ -45,9 +59,17 @@ export default function TeachersPage() {
   });
 
   React.useEffect(() => {
-    fetchApi<{ data: ApiUser[] }>("/api/v1/users")
-      .then((response) => setTeachers((response.data || []).map(mapUserToTeacher).filter((teacher) => teacher !== null)))
-      .catch((error) => console.error("Failed to fetch teachers", error))
+    Promise.all([
+      fetchApi<{ data: ApiUser[] }>("/api/v1/users"),
+      fetchApi<{ data: ApiCourseOffering[] }>("/api/v1/academic/course-offerings"),
+      fetchApi<{ data: ApiTeachingAssignment[] }>("/api/v1/academic/teaching-assignments"),
+    ])
+      .then(([usersResponse, offeringsResponse, assignmentsResponse]) => {
+        setTeachers((usersResponse.data || []).map(mapUserToTeacher).filter((teacher) => teacher !== null));
+        setCourseOfferingOptions((offeringsResponse.data || []).map(mapOfferingToOption));
+        setTeachingAssignments(assignmentsResponse.data || []);
+      })
+      .catch((error) => console.error("Failed to fetch teacher references", error))
       .finally(() => setLoadingTeachers(false));
   }, []);
 
@@ -61,9 +83,13 @@ export default function TeachersPage() {
     setSheetOpen(true);
   }
 
+  function getTeacherAssignments(teacherId: string) {
+    return teachingAssignments.filter((assignment) => assignment.teacherId === teacherId && assignment.status !== "inactive");
+  }
+
   function openEdit(teacher: TeacherDirectoryItem) {
     setEditingTeacher(teacher);
-    reset({ name: teacher.name, email: teacher.email });
+    reset({ name: teacher.name, email: teacher.email, courseOfferingId: getTeacherAssignments(teacher.id)[0]?.courseOfferingId ?? "" });
     setSheetOpen(true);
   }
 
@@ -78,12 +104,19 @@ export default function TeachersPage() {
     try {
       const saved = await fetchApi<ApiUser>(endpoint, {
         method,
-        body: JSON.stringify({ ...values, role: "teacher" }),
+        body: JSON.stringify({ name: values.name, email: values.email, role: "teacher" }),
       });
       const teacher = mapUserToTeacher(saved);
       if (!teacher) throw new Error("Saved user is not a teacher");
+      if (values.courseOfferingId) {
+        const assignment = await fetchApi<ApiTeachingAssignment>("/api/v1/academic/teaching-assignments", {
+          method: "POST",
+          body: JSON.stringify({ courseOfferingId: values.courseOfferingId, teacherId: teacher.id, role: "primary" }),
+        });
+        setTeachingAssignments((current) => [assignment, ...current.filter((item) => item.id !== assignment.id)]);
+      }
       setTeachers((current) => editingTeacher ? current.map((item) => item.id === editingTeacher.id ? teacher : item) : [teacher, ...current]);
-      toast(editingTeacher ? "Teacher updated" : "Teacher invited", `${values.name} tersimpan sebagai guru.`);
+      toast(editingTeacher ? "Teacher updated" : "Teacher invited", `${values.name} tersimpan sebagai guru${values.courseOfferingId ? " dan sudah punya mapel yang diampu" : ""}.`);
       setSheetOpen(false);
     } catch (error) {
       toast("Request failed", (error as Error).message, "warning");
@@ -144,18 +177,27 @@ export default function TeachersPage() {
         <div className="divide-y divide-[color:var(--border)]">
           {loadingTeachers ? <DirectoryTableSkeleton rows={4} kind="users" className="md:grid-cols-[1.3fr_0.7fr_0.5fr_auto_auto]" /> : filteredTeachers.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm font-semibold text-[color:var(--muted-foreground)]">Belum ada guru untuk tenant ini.</div>
-          ) : filteredTeachers.map((teacher) => (
-            <div key={teacher.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1.3fr_0.7fr_0.5fr_auto_auto] md:items-center">
+          ) : filteredTeachers.map((teacher) => {
+            const assignedOfferings = getTeacherAssignments(teacher.id)
+              .map((assignment) => courseOfferingOptions.find((option) => option.value === assignment.courseOfferingId)?.label)
+              .filter((label): label is string => Boolean(label));
+            return (
+            <div key={teacher.id} className="grid gap-4 px-5 py-4 md:grid-cols-[1.1fr_1fr_0.45fr_auto_auto] md:items-center">
               <div>
                 <p className="font-semibold text-[color:var(--foreground)]">{teacher.name}</p>
                 <p className="mt-1 text-xs text-[color:var(--muted-foreground)]">{teacher.email}</p>
               </div>
-              <Badge>Guru</Badge>
+              <div className="text-sm text-[color:var(--muted-foreground)]">
+                <span className="font-medium text-[color:var(--foreground)]">Mapel diampu</span>
+                <br />
+                {assignedOfferings.length ? assignedOfferings.join(", ") : "Belum ditugaskan"}
+              </div>
               <Badge variant={teacher.status === "active" ? "success" : "default"}>{teacher.status}</Badge>
               <Button variant="secondary" size="sm" onClick={() => openEdit(teacher)}><Edit3 className="h-4 w-4" /> Edit</Button>
               <Button variant="secondary" size="sm" onClick={() => openPassword(teacher)}><KeyRound className="h-4 w-4" /> Password</Button>
             </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
 
@@ -164,6 +206,19 @@ export default function TeachersPage() {
           <InputGroup title="Teacher Identity" description="Data akun dasar guru.">
             <InputGroupItem span="full"><FloatingInput label="Nama Lengkap" prefix={<UserRound className="h-4 w-4" />} {...register("name")} error={errors.name?.message} /></InputGroupItem>
             <InputGroupItem span="full"><FloatingInput label="Email" prefix={<Mail className="h-4 w-4" />} {...register("email")} error={errors.email?.message} /></InputGroupItem>
+          </InputGroup>
+          <InputGroup title="Mata Pelajaran Diampu" description="Pilih course offering agar guru jelas mengajar mapel apa dan kelas mana." className="mt-5">
+            <InputGroupItem span="full">
+              <FloatingSelect
+                label="Mata Pelajaran + Kelas"
+                options={[{ label: "Belum ditugaskan", value: "" }, ...courseOfferingOptions]}
+                {...register("courseOfferingId")}
+                error={errors.courseOfferingId?.message}
+              />
+              <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                Ini menyimpan teaching assignment: guru → course offering. Course creation nanti hanya memilih mapel/kelas, bukan memilih nama guru sebagai mapel.
+              </p>
+            </InputGroupItem>
           </InputGroup>
           <div className="mt-6 flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setSheetOpen(false)}>Cancel</Button>

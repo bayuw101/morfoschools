@@ -12,9 +12,10 @@ import { LogoLockup } from "@/components/ui/logo-lockup";
 const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
 
 const demoAccounts = [
-  { label: "Guru", email: "guru.biologi@morfosis.demo", role: "Monitor ujian & grading essay" },
-  { label: "Siswa", email: "alya@morfosis.demo", role: "Exam gate, autosave, result" },
   { label: "Admin", email: "admin@morfosis.demo", role: "Operasional sekolah" },
+  { label: "Guru Biologi", email: "guru.biologi@morfosis.demo", role: "Monitor ujian & grading essay" },
+  { label: "Siswa Alya", email: "alya@morfosis.demo", role: "Exam gate, autosave, result" },
+  { label: "Siswa Bima", email: "bima@morfosis.demo", role: "Exam gate, autosave, result" },
 ];
 
 export default function LoginPage() {

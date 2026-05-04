@@ -91,7 +91,7 @@ func main() {
 		mux.Handle("/api/v1/users", identityHandler)
 		mux.Handle("/api/v1/users/", identityHandler)
 
-		studentHandler := students.NewHandler(students.NewPostgresRepository(pgxPool))
+		studentHandler := authctx.RequirePermission(authctx.ManageStudents)(students.NewHandler(students.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/students", studentHandler)
 		mux.Handle("/api/v1/students/", studentHandler)
 
@@ -128,7 +128,7 @@ func main() {
 		protected := auth.ProtectedSessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient), []string{"/api/v1/auth/"})(authctx.Middleware(tenantctx.Middleware(mux)))
 		server = withCORS(protected)
 	} else {
-		server = withCORS(authctx.Middleware(tenantctx.Middleware(mux)))
+		server = withCORS(tenantctx.Middleware(authctx.Middleware(mux)))
 	}
 	log.Printf("api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, server); err != nil {

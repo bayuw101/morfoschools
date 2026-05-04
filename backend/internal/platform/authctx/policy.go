@@ -5,6 +5,7 @@ type Permission string
 const (
 	ManageTenants       Permission = "tenants:manage"
 	ManageUsers         Permission = "users:manage"
+	ManageStudents      Permission = "students:manage"
 	ManageClasses       Permission = "classes:manage"
 	ManageSubjectGroups Permission = "subject_groups:manage"
 	ManageCourses       Permission = "courses:manage"
@@ -17,6 +18,7 @@ var permissionsByRole = map[string]map[Permission]struct{}{
 	"owner": {
 		ManageTenants:       {},
 		ManageUsers:         {},
+		ManageStudents:      {},
 		ManageClasses:       {},
 		ManageSubjectGroups: {},
 		ManageCourses:       {},
@@ -25,6 +27,7 @@ var permissionsByRole = map[string]map[Permission]struct{}{
 	},
 	"admin": {
 		ManageUsers:         {},
+		ManageStudents:      {},
 		ManageClasses:       {},
 		ManageSubjectGroups: {},
 		ManageCourses:       {},

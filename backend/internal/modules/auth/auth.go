@@ -122,17 +122,26 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handler) login(w http.ResponseWriter, r *http.Request) {
-	tenantID := tenantctx.FromContext(r.Context())
+	var req struct {
+		TenantID string `json:"tenantId"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
+		return
+	}
+
+	tenantID := req.TenantID
+	if strings.TrimSpace(tenantID) == "" {
+		tenantID = tenantctx.FromContext(r.Context())
+	}
+
 	if strings.TrimSpace(tenantID) == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "tenant_required"})
 		return
 	}
 
-	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_json"})
-		return
-	}
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 	req.Password = strings.TrimSpace(req.Password)
 

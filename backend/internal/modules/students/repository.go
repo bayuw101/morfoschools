@@ -51,21 +51,43 @@ ORDER BY students.created_at DESC`, tenantID)
 func (repo PostgresRepository) CreateStudent(ctx context.Context, tenantID string, params StudentParams) (Student, error) {
 	var item Student
 	err := repo.pool.QueryRow(ctx, `
-WITH inserted AS (
-    INSERT INTO students (tenant_id, nisn, name, status, guardian_name, guardian_contact)
-    VALUES ($1, $2, $3, $4, $5, $6)
+WITH class_match AS (
+    SELECT id, name, academic_year
+    FROM class_sections
+    WHERE tenant_id = $1 AND id::text = $7
+), create_candidate AS (
+    SELECT class_match.id, class_match.name, class_match.academic_year
+    FROM class_match
+    WHERE NOT EXISTS (SELECT 1 FROM students WHERE tenant_id = $1 AND nisn = $2)
+), inserted_user AS (
+    INSERT INTO users (email, name, status)
+    SELECT $9, $3, 'active'
+    FROM create_candidate
+    RETURNING id, email::text, name
+), inserted_membership AS (
+    INSERT INTO tenant_users (tenant_id, user_id, role)
+    SELECT $1, id, 'student'
+    FROM inserted_user
+    RETURNING user_id
+), inserted_student AS (
+    INSERT INTO students (tenant_id, user_id, nisn, name, status, guardian_name, guardian_contact)
+    SELECT $1, inserted_user.id, $2, $3, $4, $5, $6
+    FROM inserted_user
+    JOIN inserted_membership ON inserted_membership.user_id = inserted_user.id
+    ON CONFLICT (tenant_id, nisn) DO NOTHING
     RETURNING id, user_id, nisn, name, status, guardian_name, guardian_contact
 ), enrollment AS (
     INSERT INTO student_class_enrollments (tenant_id, student_id, class_section_id, academic_year, active)
-    SELECT $1, inserted.id, class_sections.id, class_sections.academic_year, true
-    FROM inserted
-    JOIN class_sections ON class_sections.tenant_id = $1 AND (class_sections.id::text = $7 OR class_sections.name = $8)
-    ON CONFLICT DO NOTHING
+    SELECT $1, inserted_student.id, class_match.id, class_match.academic_year, true
+    FROM inserted_student
+    JOIN class_match ON true
+    ON CONFLICT (tenant_id, student_id, academic_year) WHERE active DO UPDATE SET class_section_id = EXCLUDED.class_section_id
 )
-SELECT inserted.id::text, COALESCE(inserted.user_id::text, ''), inserted.nisn, inserted.name, $9::text AS email, inserted.status, inserted.guardian_name, inserted.guardian_contact,
-       COALESCE(class_sections.id::text, ''), COALESCE(class_sections.name, '')
-FROM inserted
-LEFT JOIN class_sections ON class_sections.tenant_id = $1 AND (class_sections.id::text = $7 OR class_sections.name = $8)
+SELECT s.id::text, COALESCE(s.user_id::text, ''), s.nisn, s.name, u.email::text, s.status, s.guardian_name, s.guardian_contact,
+       class_match.id::text, class_match.name
+FROM inserted_student s
+JOIN inserted_user u ON u.id = s.user_id
+JOIN class_match ON true
 `, tenantID, params.NISN, params.Name, params.Status, params.GuardianName, params.GuardianContact, params.ClassSectionID, params.ClassSection, params.Email).Scan(&item.ID, &item.UserID, &item.NISN, &item.Name, &item.Email, &item.Status, &item.GuardianName, &item.GuardianContact, &item.ClassSectionID, &item.ClassSection)
 	return item, err
 }
@@ -73,24 +95,44 @@ LEFT JOIN class_sections ON class_sections.tenant_id = $1 AND (class_sections.id
 func (repo PostgresRepository) UpdateStudent(ctx context.Context, tenantID string, studentID string, params StudentParams) (Student, error) {
 	var item Student
 	err := repo.pool.QueryRow(ctx, `
-WITH updated AS (
+WITH class_match AS (
+    SELECT id, name, academic_year
+    FROM class_sections
+    WHERE tenant_id = $1 AND id::text = $8
+), update_candidate AS (
+    SELECT students.id, students.user_id, class_match.id AS class_section_id, class_match.name AS class_section_name, class_match.academic_year
+    FROM students
+    JOIN class_match ON true
+    JOIN tenant_users ON tenant_users.tenant_id = $1 AND tenant_users.user_id = students.user_id AND tenant_users.role = 'student'
+    JOIN users ON users.id = students.user_id
+    WHERE students.tenant_id = $1 AND students.id = $2
+      AND NOT EXISTS (SELECT 1 FROM students duplicate WHERE duplicate.tenant_id = $1 AND duplicate.nisn = $3 AND duplicate.id <> $2)
+      AND NOT EXISTS (SELECT 1 FROM users duplicate WHERE duplicate.email = $10 AND duplicate.id <> users.id)
+), updated_user AS (
+    UPDATE users
+    SET name = $4, email = $10, updated_at = now()
+    FROM update_candidate
+    WHERE users.id = update_candidate.user_id
+    RETURNING users.id, users.email::text
+), updated_student AS (
     UPDATE students
     SET nisn = $3, name = $4, status = $5, guardian_name = $6, guardian_contact = $7, updated_at = now()
-    WHERE tenant_id = $1 AND id = $2
-    RETURNING id, user_id, nisn, name, status, guardian_name, guardian_contact
-), deactivate AS (
-    UPDATE student_class_enrollments SET active = false WHERE tenant_id = $1 AND student_id = $2
+    FROM update_candidate
+    JOIN updated_user ON updated_user.id = update_candidate.user_id
+    WHERE students.id = update_candidate.id AND students.tenant_id = $1
+    RETURNING students.id, students.user_id, students.nisn, students.name, students.status, students.guardian_name, students.guardian_contact
 ), enrollment AS (
     INSERT INTO student_class_enrollments (tenant_id, student_id, class_section_id, academic_year, active)
-    SELECT $1, updated.id, class_sections.id, class_sections.academic_year, true
-    FROM updated
-    JOIN class_sections ON class_sections.tenant_id = $1 AND (class_sections.id::text = $8 OR class_sections.name = $9)
-    ON CONFLICT DO NOTHING
+    SELECT $1, updated_student.id, update_candidate.class_section_id, update_candidate.academic_year, true
+    FROM updated_student
+    JOIN update_candidate ON update_candidate.id = updated_student.id
+    ON CONFLICT (tenant_id, student_id, academic_year) WHERE active DO UPDATE SET class_section_id = EXCLUDED.class_section_id
 )
-SELECT updated.id::text, COALESCE(updated.user_id::text, ''), updated.nisn, updated.name, $10::text AS email, updated.status, updated.guardian_name, updated.guardian_contact,
-       COALESCE(class_sections.id::text, ''), COALESCE(class_sections.name, '')
-FROM updated
-LEFT JOIN class_sections ON class_sections.tenant_id = $1 AND (class_sections.id::text = $8 OR class_sections.name = $9)
+SELECT s.id::text, COALESCE(s.user_id::text, ''), s.nisn, s.name, u.email::text, s.status, s.guardian_name, s.guardian_contact,
+       update_candidate.class_section_id::text, update_candidate.class_section_name
+FROM updated_student s
+JOIN updated_user u ON u.id = s.user_id
+JOIN update_candidate ON update_candidate.id = s.id
 `, tenantID, studentID, params.NISN, params.Name, params.Status, params.GuardianName, params.GuardianContact, params.ClassSectionID, params.ClassSection, params.Email).Scan(&item.ID, &item.UserID, &item.NISN, &item.Name, &item.Email, &item.Status, &item.GuardianName, &item.GuardianContact, &item.ClassSectionID, &item.ClassSection)
 	return item, err
 }

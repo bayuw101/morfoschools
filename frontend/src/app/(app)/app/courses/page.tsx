@@ -24,6 +24,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatingInput } from "@/components/ui/floating-input";
 import { FloatingSelect } from "@/components/ui/floating-select";
 import { InputGroup, InputGroupItem } from "@/components/ui/input-group";
@@ -58,7 +59,7 @@ import {
 
 const courseSchema = z.object({
   title: z.string().min(3, "Judul course minimal 3 karakter"),
-  teacher: z.string().min(1, "Guru wajib dipilih"),
+  courseOfferingId: z.string().min(1, "Mata pelajaran/kelas wajib dipilih"),
   description: z.string().min(10, "Deskripsi minimal 10 karakter"),
   status: z.enum(["draft", "published"], { message: "Status wajib dipilih" }),
 });
@@ -85,7 +86,7 @@ type Course = CourseForm & CourseDirectoryRecord;
 
 const emptyCourse: CourseForm = {
   title: "",
-  teacher: "Guru Matematika",
+  courseOfferingId: "",
   description: "",
   status: "draft",
 };
@@ -108,10 +109,10 @@ const emptyPrerequisites: PrerequisiteTarget = {
   exams: [],
 };
 
-const subjectGroupOptions = [
-  "Matematika X - Pagi",
-  "Olimpiade Fisika",
-  "Bahasa Indonesia Remedial",
+const courseOfferingFallbackOptions = [
+  "Matematika - X IPA 1",
+  "Biologi - X IPA 1",
+  "Bahasa Indonesia - XI IPS 1",
 ].map((item) => ({ label: item, value: item }));
 const prerequisiteCourseOptions = [
   "Bilangan & Operasi Dasar",
@@ -143,12 +144,6 @@ const studentOptions = [
   "Gita Lestari",
   "Hana Prameswari",
 ].map((item) => ({ label: item, value: item }));
-const teacherOptions = [
-  "Guru Matematika",
-  "Guru Fisika",
-  "Guru Bahasa",
-  "Guru Inggris",
-].map((item) => ({ label: item, value: item }));
 const moduleTypeOptions = [
   { label: "Upload video to YouTube", value: "youtube_upload" },
   { label: "Upload file to Google Drive", value: "drive_upload" },
@@ -166,13 +161,14 @@ function storageIcon(type: CourseModule["type"]) {
 export default function CoursesPage() {
   const [courses, setCourses] = React.useState<Course[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [courseOfferingOptions, setCourseOfferingOptions] = React.useState(subjectGroupOptions);
+  const [courseOfferingOptions, setCourseOfferingOptions] = React.useState(courseOfferingFallbackOptions);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [modulesOpen, setModulesOpen] = React.useState(false);
   const [editingCourse, setEditingCourse] = React.useState<Course | null>(null);
   const [selectedCourse, setSelectedCourse] = React.useState<Course | null>(
     null,
   );
+  const [confirmCourse, setConfirmCourse] = React.useState<Course | null>(null);
   const [query, setQuery] = React.useState("");
   const [toasts, setToasts] = React.useState<ToastItem[]>([]);
   const [googleConnected, setGoogleConnected] = React.useState(false);
@@ -196,7 +192,7 @@ export default function CoursesPage() {
     try {
       const [apiCourses, references] = await Promise.all([listCoursesFromApi(), listCourseReferenceOptions()]);
       setCourses(apiCourses);
-      setCourseOfferingOptions(references.courseOfferings.length ? references.courseOfferings : subjectGroupOptions);
+      setCourseOfferingOptions(references.courseOfferings.length ? references.courseOfferings : courseOfferingFallbackOptions);
     } catch (error) {
       toast("Gagal memuat course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
       setCourses([]);
@@ -234,7 +230,7 @@ export default function CoursesPage() {
     setDraftPrerequisites(course.prerequisites);
     courseForm.reset({
       title: course.title,
-      teacher: course.teacher,
+      courseOfferingId: course.courseOfferingId,
       description: course.description,
       status: course.status,
     });
@@ -312,7 +308,7 @@ export default function CoursesPage() {
     if (editingCourse) {
       try {
         const updated = await updateCourseInApi(editingCourse.id, {
-          courseOfferingId: draftAssignments.subjectGroups[0] || editingCourse.courseOfferingId,
+          courseOfferingId: values.courseOfferingId,
           title: values.title,
           description: values.description,
           status: values.status,
@@ -337,13 +333,12 @@ export default function CoursesPage() {
       }
     } else {
       try {
-        const courseOfferingId = draftAssignments.subjectGroups[0] || courses[0]?.courseOfferingId;
-        if (!courseOfferingId) {
-          toast("Course offering wajib dipilih", "Backend membutuhkan course offering sebelum course dibuat.", "warning");
+        if (!values.courseOfferingId) {
+          toast("Mata pelajaran wajib dipilih", "Pilih kombinasi mata pelajaran + kelas sebelum course dibuat.", "warning");
           return;
         }
         const created = await createCourseInApi({
-          courseOfferingId,
+          courseOfferingId: values.courseOfferingId,
           title: values.title,
           description: values.description,
           status: values.status,
@@ -393,11 +388,13 @@ export default function CoursesPage() {
     }
   }
 
-  async function removeCourse(course: Course) {
+  async function deleteCourse() {
+    if (!confirmCourse) return;
     try {
-      await deleteCourseInApi(course.id);
-      setCourses((current) => current.filter((item) => item.id !== course.id));
-      toast("Course dihapus", `${course.title} dihapus dari backend.`, "warning");
+      await deleteCourseInApi(confirmCourse.id);
+      setCourses((current) => current.filter((item) => item.id !== confirmCourse.id));
+      toast("Course dihapus", `${confirmCourse.title} dihapus dari backend.`, "warning");
+      setConfirmCourse(null);
     } catch (error) {
       toast("Gagal menghapus course", error instanceof Error ? error.message : "Periksa koneksi backend.", "error");
     }
@@ -569,8 +566,8 @@ export default function CoursesPage() {
                 </Button>
                 <Button
                   size="sm"
-                  variant="ghost"
-                  onClick={() => void removeCourse(course)}
+                  variant="danger"
+                  onClick={() => setConfirmCourse(course)}
                 >
                   <Trash2 className="h-4 w-4" /> Delete
                 </Button>
@@ -622,11 +619,14 @@ export default function CoursesPage() {
             </InputGroupItem>
             <InputGroupItem span="full">
               <FloatingSelect
-                label="Guru"
-                options={teacherOptions}
-                {...courseForm.register("teacher")}
-                error={courseForm.formState.errors.teacher?.message}
+                label="Mata Pelajaran + Kelas"
+                options={courseOfferingOptions}
+                {...courseForm.register("courseOfferingId")}
+                error={courseForm.formState.errors.courseOfferingId?.message}
               />
+              <p className="mt-2 text-xs leading-5 text-[color:var(--muted-foreground)]">
+                Pilihan ini berasal dari Course Offering: kombinasi subject, kelas, tahun ajaran, dan semester. Guru pengampu ditentukan di halaman Teachers/Teaching Assignment, bukan saat membuat course.
+              </p>
             </InputGroupItem>
             <InputGroupItem span="full">
               <TextareaField
@@ -663,10 +663,10 @@ export default function CoursesPage() {
               {[
                 {
                   key: "subjectGroups" as const,
-                  label: "Subject Groups",
+                  label: "Course Offering",
                   options: courseOfferingOptions,
                   helper:
-                    "Rombel akademik/mapel untuk assignment lintas kelas.",
+                    "Kombinasi mata pelajaran + kelas. Ini menentukan subject utama course.",
                 },
                 {
                   key: "classSections" as const,
@@ -819,6 +819,17 @@ export default function CoursesPage() {
           </Panel>
         </form>
       </RightPullSheet>
+
+      <ConfirmDialog
+        open={Boolean(confirmCourse)}
+        onOpenChange={(open) => !open && setConfirmCourse(null)}
+        title="Delete course?"
+        description="Course ini beserta seluruh module di dalamnya akan dihapus dari backend tenant aktif."
+        confirmLabel="Delete Course"
+        tone="danger"
+        onConfirm={deleteCourse}
+        details={confirmCourse ? `${confirmCourse.title} • ${confirmCourse.teacher}` : undefined}
+      />
 
       <RightPullSheet
         open={modulesOpen}

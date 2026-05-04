@@ -115,7 +115,11 @@ export function createAuthApiClient(options: AuthApiClientOptions = {}) {
           "Content-Type": "application/json",
           "X-Tenant-ID": creds.tenantId,
         },
-        body: JSON.stringify({ email: creds.email, password: creds.password }),
+        body: JSON.stringify({ 
+          email: creds.email, 
+          password: creds.password,
+          tenantId: creds.tenantId 
+        }),
       });
 
       return {

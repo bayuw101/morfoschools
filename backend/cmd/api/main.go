@@ -13,6 +13,7 @@ import (
 	"github.com/bayuw101/morfoschools/internal/modules/identity"
 	"github.com/bayuw101/morfoschools/internal/modules/tenancy"
 	"github.com/bayuw101/morfoschools/internal/platform/authctx"
+	"github.com/bayuw101/morfoschools/internal/platform/cache"
 	"github.com/bayuw101/morfoschools/internal/platform/config"
 	"github.com/bayuw101/morfoschools/internal/platform/db"
 	httpserver "github.com/bayuw101/morfoschools/internal/platform/http"
@@ -35,13 +36,30 @@ func main() {
 		dbPool = pool
 	}
 
+	// Valkey (Redis-compatible cache) — optional, graceful degradation
+	var cacheClient cache.Cache
+	if cfg.ValkeyURL != "" {
+		c, err := cache.NewValkey(cfg.ValkeyURL)
+		if err != nil {
+			log.Printf("valkey disabled (will use nop cache): %v", err)
+			cacheClient = cache.NewNopCache()
+		} else {
+			log.Println("valkey connected — session cache + rate limiter enabled")
+			cacheClient = c
+			defer cacheClient.Close()
+		}
+	} else {
+		cacheClient = cache.NewNopCache()
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", httpserver.NewRouter(dbPool))
 	mux.Handle("/readyz", httpserver.NewRouter(dbPool))
 	if dbPool != nil {
 		pgxPool := dbPool.PgxPool()
-		authRepo := auth.NewPostgresRepository(pgxPool)
-		mux.Handle("/api/v1/auth/", auth.NewHandler(authRepo))
+		authRepo := auth.NewCachedRepository(auth.NewPostgresRepository(pgxPool), cacheClient)
+		loginLimiter := auth.NewLoginRateLimiter(cacheClient, 10, 10*time.Minute)
+		mux.Handle("/api/v1/auth/", auth.NewHandlerWithRateLimiter(authRepo, loginLimiter))
 		mux.Handle("/api/v1/tenants", tenancy.NewHandler(tenancy.NewPostgresRepository(pgxPool)))
 		mux.Handle("/api/v1/users", identity.NewHandler(identity.NewPostgresRepository(pgxPool)))
 		academicHandler := academic.NewHandler(academic.NewPostgresRepository(pgxPool))
@@ -67,8 +85,7 @@ func main() {
 
 	var server http.Handler
 	if dbPool != nil {
-		authRepo := auth.NewPostgresRepository(dbPool.PgxPool())
-		server = auth.SessionMiddleware(authRepo)(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
+		server = auth.SessionMiddleware(auth.NewCachedRepository(auth.NewPostgresRepository(dbPool.PgxPool()), cacheClient))(authctx.Middleware(tenantctx.Middleware(withCORS(mux))))
 	} else {
 		server = authctx.Middleware(tenantctx.Middleware(withCORS(mux)))
 	}

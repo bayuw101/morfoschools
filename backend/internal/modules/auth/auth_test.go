@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bayuw101/morfoschools/internal/platform/cache"
 	"github.com/bayuw101/morfoschools/internal/platform/tenantctx"
 )
 
@@ -152,6 +153,36 @@ func TestLoginSucceedsWithCorrectCredentials(t *testing.T) {
 	}
 	if result.User.ID != "user-1" || result.User.Role != "teacher" {
 		t.Fatalf("unexpected user in response: %+v", result.User)
+	}
+}
+
+func TestLoginRateLimited(t *testing.T) {
+	hashed, _ := HashPassword("morfosis123")
+	repo := &fakeAuthRepository{
+		user: &UserCredentials{
+			ID: "user-1", Email: "guru@example.sch.id",
+			Name: "Guru A", Role: "teacher", PasswordHash: hashed,
+		},
+	}
+	limiter := NewLoginRateLimiter(cache.NewFakeCache(), 1, time.Minute)
+	handler := tenantctx.Middleware(NewHandlerWithRateLimiter(repo, limiter))
+	body := `{"email":"guru@example.sch.id","password": "morfosis123"}`
+
+	// First attempt consumes the single allowed slot.
+	firstReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(body))
+	firstReq.Header.Set(tenantctx.HeaderName, "tenant-1")
+	firstReq.RemoteAddr = "127.0.0.1:12345"
+	handler.ServeHTTP(httptest.NewRecorder(), firstReq)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(body))
+	req.Header.Set(tenantctx.HeaderName, "tenant-1")
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

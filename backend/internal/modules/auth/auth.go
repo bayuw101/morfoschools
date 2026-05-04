@@ -92,11 +92,19 @@ func GenerateToken() (string, error) {
 // ── handler ──
 
 type Handler struct {
-	repo Repository
+	repo        Repository
+	rateLimiter LoginRateLimiter
 }
 
 func NewHandler(repo Repository) http.Handler {
-	return Handler{repo: repo}
+	return Handler{repo: repo, rateLimiter: NewNopLoginRateLimiter()}
+}
+
+func NewHandlerWithRateLimiter(repo Repository, limiter LoginRateLimiter) http.Handler {
+	if limiter == nil {
+		limiter = NewNopLoginRateLimiter()
+	}
+	return Handler{repo: repo, rateLimiter: limiter}
 }
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +138,17 @@ func (h Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email_and_password_required"})
+		return
+	}
+
+	// Rate limit check
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = strings.Split(fwd, ",")[0]
+	}
+	allowed, _ := h.rateLimiter.Allow(r.Context(), tenantID, req.Email, strings.TrimSpace(ip))
+	if !allowed {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate_limited"})
 		return
 	}
 

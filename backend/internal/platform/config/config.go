@@ -7,6 +7,7 @@ type Config struct {
 	HTTPAddr    string
 	DatabaseURL string
 	NATSURL     string
+	ValkeyURL   string
 }
 
 func Load() Config {
@@ -15,6 +16,7 @@ func Load() Config {
 		HTTPAddr:    envOrDefault("HTTP_ADDR", ":8080"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		NATSURL:     envOrDefault("NATS_URL", "nats://localhost:4222"),
+		ValkeyURL:   os.Getenv("VALKEY_URL"),
 	}
 }
 

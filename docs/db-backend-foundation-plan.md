@@ -61,11 +61,11 @@ Build the low-spec friendly backend foundation for a multi-tenant Indonesian sch
   - [x] `exam_gate_windows`
   - [x] `exam_prerequisites`
   - [x] `exam_eligible_students`
-- [~] Exam ingestion tables:
+- [x] Exam ingestion/runtime tables:
   - [x] `exam_attempts`
   - [x] `exam_submission_inbox` partitioned by day
   - [x] `exam_submission_receipts`
-  - [ ] `exam_security_events`
+  - [x] `exam_security_events`
 
 ## Phase BE-1 — API Vertical Slice
 
@@ -138,6 +138,13 @@ Start small with tenancy + health.
 - [x] Exam completion prerequisites use existing `exam_attempts` completion/submission state
 - [x] Runtime exam access remains designed to read `exam_eligible_students`, not join targets/prerequisites during spikes
 
+## Phase BE-8 — Exam Gate & Security Events
+
+- [x] `POST /api/v1/exams/{exam_id}/gate/check` validates materialized eligibility plus gate-window/password access before students enter the exam client
+- [x] Gate checks use `exam_eligible_students` and `exam_gate_windows`, preserving the low-cost runtime path for exam spikes
+- [x] `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` records fullscreen/tab/window/network/copy-paste violations as append-only tenant-scoped events
+- [x] `exam_security_events` indexes support attempt-level audit and teacher monitoring dashboards
+
 ## Verification
 
 - [x] `docker compose config`
@@ -164,3 +171,4 @@ Start small with tenancy + health.
 - 2026-05-04: Completed BE-5 course foundation. Added `courses`, `course_modules`, `course_resources`, and `course_progress_events` migration plus TDD-covered APIs for course/module/resource management and progress evidence events. Resources store metadata/external URLs only so Google Drive/YouTube remain outside LMS critical path.
 - 2026-05-04: Completed BE-6 exam management foundation. Added `exam_questions`, `exam_targets`, `exam_gate_windows`, and `exam_prerequisites` migration plus TDD-covered APIs for exam profiles, authoring, target rules, gate scheduling, and prerequisite rules. Ingestion endpoints remain routed through the same `/api/v1/exams/.../attempts/...` path for the exam critical path.
 - 2026-05-04: Completed BE-7 eligibility materialization API. Added TDD-covered `GET /api/v1/exams/{exam_id}/eligibility` and `POST /api/v1/exams/{exam_id}/eligibility/recalculate`, using exam targets + prerequisites to materialize `exam_eligible_students` before runtime exam spikes.
+- 2026-05-04: Completed BE-8 exam gate and security events. Added TDD-covered `POST /api/v1/exams/{exam_id}/gate/check` for materialized eligibility + gate-window/password checks, plus `POST /api/v1/exams/{exam_id}/attempts/{attempt_id}/security-events` and `exam_security_events` for append-only exam-mode violation audit.
